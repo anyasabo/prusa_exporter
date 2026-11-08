@@ -74,7 +74,7 @@ var metrics = []metricDesc{
 	{MetricPrinterFiles, "Number of files in storage", []string{"printer_storage"}},
 	{MetricPrinterMaterial, "Returns information about loaded filament. Returns 0 if there is no loaded filament", []string{"printer_filament"}},
 	{MetricPrinterPrintTime, "Returns information about current print time.", nil},
-	{MetricPrinterNozzleSize, "Returns information about selected nozzle size.", nil},
+	{MetricPrinterNozzleSize, "Diameter of the selected nozzle in meters (PrusaLink).", nil},
 	{MetricPrinterStatus, "Returns information status of printer.", []string{"printer_state"}},
 	{MetricPrinterAxis, "Returns information about position of axis.", []string{"printer_axis"}},
 	{MetricPrinterFlow, "Returns information about of filament flow in ratio (0.0 - 1.0).", nil},
@@ -242,7 +242,7 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 
 			if c.metricEnabled(MetricPrinterNozzleSize) {
 				printerNozzleSize := prometheus.MustNewConstMetric(c.metricDesc[MetricPrinterNozzleSize], prometheus.GaugeValue,
-					info.NozzleDiameter, c.GetLabels(s, job)...)
+					info.NozzleDiameter/1000, c.GetLabels(s, job)...) // PrusaLink gives mm
 
 				ch <- printerNozzleSize
 			}
