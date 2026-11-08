@@ -31,11 +31,23 @@ linters:
     - unparam
     - usestdlibvars
     - usetesting
+    - wrapcheck
   settings:
     exhaustive:
       default-signifies-exhaustive: true
     promlinter:
       strict: true
+    wrapcheck:
+      # Wrap the errors from outside the module. Our packages wrap their own errors.
+      ignore-package-globs:
+        - github.com/anyasabo/prusa_exporter/*
+      extra-ignore-sigs:
+        # The *url.Error of Client.Do has the method and the URL.
+        - (*net/http.Client).Do(
+        # The group returns the errors of our own functions.
+        - (*golang.org/x/sync/errgroup.Group).Wait(
+        # A RoundTripper that wraps another one passes the error through.
+        - (net/http.RoundTripper).RoundTrip(
     sloglint:
       kv-only: true
       no-global: all

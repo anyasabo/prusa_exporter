@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/anyasabo/prusa_exporter/internal/config"
 )
 
 const (
@@ -69,7 +71,7 @@ func localAddress(ctx context.Context, printerAddress string) (string, error) {
 	}
 	conn, err := (&net.Dialer{}).DialContext(ctx, "udp", net.JoinHostPort(host, "80"))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("find the local address: %w", err)
 	}
 	defer conn.Close()
 	addr, ok := conn.LocalAddr().(*net.UDPAddr)
@@ -85,7 +87,7 @@ func EnableUDPMetrics(ctx context.Context, c *Client, o GcodeOptions) error {
 	if host == "" {
 		var err error
 		if host, err = localAddress(ctx, c.Printer.Address); err != nil {
-			return fmt.Errorf("find the local address: %w", err)
+			return err
 		}
 	}
 	path := "/api/v1/files/usb//" + gcodeFile
@@ -108,7 +110,7 @@ func RunGcode(ctx context.Context, targets []*Target, o GcodeOptions, logger *sl
 	var wg sync.WaitGroup
 	for _, t := range targets {
 		wg.Go(func() {
-			l := logger.With("printer_address", t.Client.Printer.Address, "printer_name", t.Client.Printer.Name)
+			l := logger.With(config.LabelAddress, t.Client.Printer.Address, config.LabelName, t.Client.Printer.Name)
 			for {
 				attempt, cancel := context.WithTimeout(ctx, o.Timeout)
 				err := EnableUDPMetrics(attempt, t.Client, o)

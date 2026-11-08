@@ -75,7 +75,7 @@ func parseFlags(app *kingpin.Application, args []string) (*flags, error) {
 		return nil
 	})
 	if _, err := app.Parse(args); err != nil {
-		return nil, err
+		return nil, err //nolint:wrapcheck // kingpin errors are messages for the user, in the kingpin format.
 	}
 	return f, nil
 }
@@ -99,7 +99,7 @@ func run(ctx context.Context, f *flags, logger *slog.Logger) error {
 
 	cfg, err := config.Load(f.configFile)
 	if err != nil {
-		return fmt.Errorf("load %s: %w", f.configFile, err)
+		return err
 	}
 	for _, key := range cfg.Deprecated() {
 		logger.Warn("The configuration file has a deprecated key. The exporter ignores it.", "key", key)
@@ -173,7 +173,7 @@ func run(ctx context.Context, f *flags, logger *slog.Logger) error {
 		},
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("landing page: %w", err)
 	}
 	mux.Handle("/", landing)
 	server := &http.Server{
@@ -189,7 +189,7 @@ func run(ctx context.Context, f *flags, logger *slog.Logger) error {
 	})
 	g.Go(func() error {
 		if err := web.ListenAndServe(server, f.webFlags, logger); !errors.Is(err, http.ErrServerClosed) {
-			return err
+			return fmt.Errorf("serve HTTP: %w", err)
 		}
 		return nil
 	})
