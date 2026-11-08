@@ -2,7 +2,7 @@
 
 This file is generated. Do not edit it. To write it again, run:
 
-    mise exec -- go test -run TestMetricsReference -update .
+    mise exec -- go test -run TestMetricsReference . -args -update
 
 The test reads the output of the exporter. If a metric name, type, label or help text
 changes, the test fails until this file is written again. Then update the dashboards and the

@@ -23,6 +23,9 @@ mise run release-dry-run     # all binaries, checksums and SBOMs in dist/, no pu
 ```
 
 One test: `mise exec -- go test -run 'TestExporterPrinting' ./internal/prusalink`.
+Golden files: `TestMetricsReference` (`docs/metrics.md`) and `TestCaptures`
+(`internal/prusalink/testdata/*/metrics.prom`). Write them again with `-args -update` after the
+package path.
 Benchmarks: `mise exec -- go test -run '^$' -bench . ./internal/udp`.
 Run the exporter: `mise exec -- go run . --config.file=prusa.yml --no-udp.gcode-enabled`.
 
@@ -87,15 +90,18 @@ There is no global state and no default registry.
 
 - **Metric names and labels are a contract.** The dashboards in `docs/dashboards/` and the
   homeserver (`~/dotfiles/homeserver`: dashboards, alert rules, `scripts/print-recorder`) query
-  them. `TestMetricsReference` generates `docs/metrics.md` from the real output and fails when
-  the output changes. To write it again: `mise exec -- go test -run TestMetricsReference -update .`
+  them. `TestMetricsReference` generates `docs/metrics.md` from the real output. If the output
+  changes, the test fails. To write it again: `mise exec -- go test -run TestMetricsReference . -args -update`
   Then update "Changes from 2.0.0" in the README and the dashboards.
 - `prusa.yml` is strict: an unknown key is an error. `exporter.scrape_timeout` and
   `exporter.log_level` are accepted and ignored, because old files have them.
   `docs/config/prusa.yml` must stay valid (`TestSampleConfig`).
 - The label names are constants: `config.Label*` for PrusaLink and Loki, `labelMAC` and
   `labelAddress` in `internal/udp`.
-- The PrusaLink test fixtures in `internal/prusalink/testdata/` follow the Buddy firmware
+- Each directory in `internal/prusalink/testdata/` is a capture of real PrusaLink responses
+  (with the serial number replaced) and the expected output in `metrics.prom`. To add a printer
+  state, copy the five responses into a new directory and run `TestCaptures` with `-update`.
+- The other PrusaLink test fixtures in `internal/prusalink/testdata/` follow the Buddy firmware
   (`lib/WUI/link_content/basic_gets.cpp`, `src/state/printer_state.cpp`). The fake server in
   `fake_test.go` implements digest auth and counts the challenges.
 

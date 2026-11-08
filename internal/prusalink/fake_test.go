@@ -25,7 +25,7 @@ const (
 	testNonce  = "dcd98b7102dd2f0e8b11d0f600bfb0c093"
 )
 
-//go:embed testdata/*.json
+//go:embed testdata
 var testdata embed.FS
 
 // fakePrusaLink is a PrusaLink server for tests. It checks the digest or the API key.

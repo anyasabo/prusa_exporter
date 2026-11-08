@@ -1,0 +1,62 @@
+# HELP prusa_axis_position_meters Position of an axis.
+# TYPE prusa_axis_position_meters gauge
+prusa_axis_position_meters{printer_address="PRINTER",printer_axis="x",printer_model="COREONEL",printer_name="Test"} 0.262
+prusa_axis_position_meters{printer_address="PRINTER",printer_axis="y",printer_model="COREONEL",printer_name="Test"} -0.005
+prusa_axis_position_meters{printer_address="PRINTER",printer_axis="z",printer_model="COREONEL",printer_name="Test"} 0.2876
+# HELP prusa_fan_speed_rpm Speed of a fan in revolutions per minute.
+# TYPE prusa_fan_speed_rpm gauge
+prusa_fan_speed_rpm{fan="hotend",printer_address="PRINTER",printer_model="COREONEL",printer_name="Test"} 0
+prusa_fan_speed_rpm{fan="print",printer_address="PRINTER",printer_model="COREONEL",printer_name="Test"} 0
+# HELP prusa_info Information about the printer. The value is always 1.
+# TYPE prusa_info gauge
+prusa_info{api_version="2.0.0",printer_address="PRINTER",printer_hostname="prusa-core-one-l",printer_location="",printer_model="COREONEL",printer_name="Test",prusalink_name="",serial_number="00000-0000000000000000",server_version="2.1.2",version_text="PrusaLink"} 1
+# HELP prusa_material_info The loaded filament ("---" if none). The value is always 1.
+# TYPE prusa_material_info gauge
+prusa_material_info{printer_address="PRINTER",printer_filament="PETG",printer_model="COREONEL",printer_name="Test"} 1
+# HELP prusa_mmu_enabled 1 if the MMU is enabled, else 0.
+# TYPE prusa_mmu_enabled gauge
+prusa_mmu_enabled{printer_address="PRINTER",printer_model="COREONEL",printer_name="Test"} 0
+# HELP prusa_nozzle_size_meters Diameter of the selected nozzle.
+# TYPE prusa_nozzle_size_meters gauge
+prusa_nozzle_size_meters{printer_address="PRINTER",printer_model="COREONEL",printer_name="Test"} 0.0004
+# HELP prusa_print_flow_ratio Flow factor of the printer, 1 is 100 %.
+# TYPE prusa_print_flow_ratio gauge
+prusa_print_flow_ratio{printer_address="PRINTER",printer_model="COREONEL",printer_name="Test"} 1
+# HELP prusa_print_speed_ratio Speed factor of the printer, 1 is 100 %.
+# TYPE prusa_print_speed_ratio gauge
+prusa_print_speed_ratio{printer_address="PRINTER",printer_model="COREONEL",printer_name="Test"} 1
+# HELP prusa_print_time_seconds Time since the start of the current print.
+# TYPE prusa_print_time_seconds gauge
+prusa_print_time_seconds{printer_address="PRINTER",printer_model="COREONEL",printer_name="Test"} 0
+# HELP prusa_printer_state 1 for the current state of the printer, else 0.
+# TYPE prusa_printer_state gauge
+prusa_printer_state{printer_address="PRINTER",printer_model="COREONEL",printer_name="Test",printer_state="ATTENTION"} 0
+prusa_printer_state{printer_address="PRINTER",printer_model="COREONEL",printer_name="Test",printer_state="BUSY"} 0
+prusa_printer_state{printer_address="PRINTER",printer_model="COREONEL",printer_name="Test",printer_state="ERROR"} 0
+prusa_printer_state{printer_address="PRINTER",printer_model="COREONEL",printer_name="Test",printer_state="FINISHED"} 1
+prusa_printer_state{printer_address="PRINTER",printer_model="COREONEL",printer_name="Test",printer_state="IDLE"} 0
+prusa_printer_state{printer_address="PRINTER",printer_model="COREONEL",printer_name="Test",printer_state="PAUSED"} 0
+prusa_printer_state{printer_address="PRINTER",printer_model="COREONEL",printer_name="Test",printer_state="PRINTING"} 0
+prusa_printer_state{printer_address="PRINTER",printer_model="COREONEL",printer_name="Test",printer_state="READY"} 0
+prusa_printer_state{printer_address="PRINTER",printer_model="COREONEL",printer_name="Test",printer_state="STOPPED"} 0
+prusa_printer_state{printer_address="PRINTER",printer_model="COREONEL",printer_name="Test",printer_state="UNKNOWN"} 0
+# HELP prusa_printing_progress_ratio Progress of the current print, from 0 to 1.
+# TYPE prusa_printing_progress_ratio gauge
+prusa_printing_progress_ratio{printer_address="PRINTER",printer_model="COREONEL",printer_name="Test"} 0
+# HELP prusa_printing_time_remaining_seconds Estimated time until the end of the current print.
+# TYPE prusa_printing_time_remaining_seconds gauge
+prusa_printing_time_remaining_seconds{printer_address="PRINTER",printer_model="COREONEL",printer_name="Test"} 0
+# HELP prusa_temperature_celsius Temperature of a heated element.
+# TYPE prusa_temperature_celsius gauge
+prusa_temperature_celsius{printer_address="PRINTER",printer_heated_element="bed",printer_model="COREONEL",printer_name="Test"} 30.8
+prusa_temperature_celsius{printer_address="PRINTER",printer_heated_element="tool0",printer_model="COREONEL",printer_name="Test"} 29.4
+# HELP prusa_temperature_target_celsius Target temperature of a heated element.
+# TYPE prusa_temperature_target_celsius gauge
+prusa_temperature_target_celsius{printer_address="PRINTER",printer_heated_element="bed",printer_model="COREONEL",printer_name="Test"} 0
+prusa_temperature_target_celsius{printer_address="PRINTER",printer_heated_element="tool0",printer_model="COREONEL",printer_name="Test"} 0
+# HELP prusa_udp_metrics_gcode_sent 1 if the exporter sent and started the G-code that enables the UDP metrics, else 0.
+# TYPE prusa_udp_metrics_gcode_sent gauge
+prusa_udp_metrics_gcode_sent{printer_address="PRINTER",printer_model="COREONEL",printer_name="Test"} 0
+# HELP prusa_up 1 if all PrusaLink requests of the scrape succeeded, else 0.
+# TYPE prusa_up gauge
+prusa_up{printer_address="PRINTER",printer_model="COREONEL",printer_name="Test"} 1
