@@ -7,9 +7,14 @@ scrape_configs:
     static_configs:
       - targets: ["localhost:9090"]
 
+  - job_name: "prusa_exporter"
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: ["exporter:10009"]
+
   - job_name: "prusalink"
-    scrape_timeout: 60s
-    scrape_interval: 60s # giving API some time to respond
+    scrape_interval: 30s
+    scrape_timeout: 10s # the exporter ends the PrusaLink requests before this timeout
     metrics_path: "/metrics/prusalink"
     static_configs:
       - targets: ["exporter:10009"]

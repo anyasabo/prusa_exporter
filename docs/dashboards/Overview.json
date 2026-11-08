@@ -482,7 +482,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "max by (printer_name, printer_model, printer_address)(prusa_status_info) ",
+          "expr": "max by (printer_name, printer_model, printer_address, printer_state)(prusa_printer_state == 1)",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -556,68 +556,7 @@
       "description": "",
       "fieldConfig": {
         "defaults": {
-          "mappings": [
-            {
-              "options": {
-                "1": {
-                  "color": "semi-dark-blue",
-                  "index": 0,
-                  "text": "Operational"
-                },
-                "3": {
-                  "color": "orange",
-                  "index": 1,
-                  "text": "Paused"
-                },
-                "4": {
-                  "color": "green",
-                  "index": 2,
-                  "text": "Printing"
-                },
-                "5": {
-                  "color": "red",
-                  "index": 3,
-                  "text": "Canceling"
-                },
-                "6": {
-                  "color": "semi-dark-orange",
-                  "index": 4,
-                  "text": "Pausing"
-                },
-                "7": {
-                  "color": "dark-red",
-                  "index": 5,
-                  "text": "Error"
-                },
-                "8": {
-                  "color": "light-purple",
-                  "index": 6,
-                  "text": "SdReady"
-                },
-                "9": {
-                  "color": "dark-red",
-                  "index": 7,
-                  "text": "ClosedOrError"
-                },
-                "10": {
-                  "color": "purple",
-                  "index": 8,
-                  "text": "Ready"
-                },
-                "11": {
-                  "color": "#32494b",
-                  "index": 9,
-                  "text": "Busy"
-                },
-                "12": {
-                  "color": "dark-blue",
-                  "index": 10,
-                  "text": "Finished"
-                }
-              },
-              "type": "value"
-            }
-          ]
+          "mappings": []
         },
         "overrides": []
       },
@@ -804,8 +743,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "max by (printer_name,printer_state)(prusa_status_info)",
-          "legendFormat": "{{printer_name}}",
+          "expr": "max by (printer_name, printer_state)(prusa_printer_state == 1)",
+          "legendFormat": "{{printer_name}}: {{printer_state}}",
           "range": true,
           "refId": "A"
         }

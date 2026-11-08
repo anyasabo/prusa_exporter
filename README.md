@@ -85,93 +85,114 @@ An event metric has two sources for its count:
 **Prusa Link** is configured with [prusa.yml](docs/config/prusa.yml) where you need to fill - Settings -> Network -> PrusaLink
 
 - `address` of the printer
-- `username` => default `maker`
-- `password` for Prusa Link
+- `apikey`, or `username` (default `maker`) and `password` for Prusa Link
 - `name` of the printer
-  - your chosen name => just use basic name non standard - type
-- `type` - model of the printer
-  - MK3.9 / MK4 / MK4S / XL / Core One ...
+- `type` - model of the printer, for example `MK4S`, `XL` or `Core One`. The dashboards filter by it.
+
+The exporter reads the PrusaLink API at each scrape. The requests for one printer stop after `prusalink_scrape_budget` (default 8 s), or before the scrape timeout of the scraper (header `X-Prometheus-Scrape-Timeout-Seconds`), whichever is first. A key in `prusa.yml` that the exporter does not know is an error.
+
+| Metric | Labels | Description |
+| --- | --- | --- |
+| `prusa_up` | printer | 1 if all PrusaLink requests of the scrape succeeded, else 0 |
+| `prusa_scrape_duration_seconds` | printer | Duration of the PrusaLink requests of the scrape |
+| `prusa_printer_state` | common, `printer_state` | 1 for the current state (`IDLE`, `BUSY`, `PRINTING`, `PAUSED`, `FINISHED`, `STOPPED`, `ERROR`, `ATTENTION`, `READY`, `UNKNOWN`), else 0 |
+| `prusa_job_info` | printer, `printer_job_name`, `printer_job_path` | 1 during a print. No series without a job |
+| `prusa_info` | common, version and identity labels | Always 1 |
+| `prusa_temperature_celsius`, `prusa_temperature_target_celsius` | common, `printer_heated_element` | Bed and nozzle (`tool0`) |
+| `prusa_axis_position_meters` | common, `printer_axis` | Position of x, y and z |
+| `prusa_fan_speed_rpm` | common, `fan` | Hotend and print fan |
+| `prusa_print_flow_ratio`, `prusa_print_speed_ratio` | common | 1 is 100 % |
+| `prusa_printing_progress_ratio` | common | From 0 to 1 |
+| `prusa_print_time_seconds`, `prusa_printing_time_remaining_seconds` | common | Time of the current print |
+| `prusa_nozzle_size_meters` | common | Diameter of the nozzle |
+| `prusa_mmu_enabled` | common | 1 if the MMU is enabled |
+| `prusa_material_info` | common, `printer_filament` | Always 1. `---` if no filament is loaded |
+| `prusa_udp_metrics_gcode_sent` | printer | 1 after the G-code that enables the UDP metrics ran |
+
+"printer" is `printer_address`, `printer_model` and `printer_name`. "common" is the list in `prusalink.common_labels`. The default is the printer labels. The job labels `printer_job_name` and `printer_job_path` make new series for each print. Add them only for a specific need. `prusalink.disable_metrics` removes metrics by name.
 
 ### Guide how to get infomration from the printer
 
 I've prepared quick guide where you can learn how to get credentials and IP address from the printer for the prusa_exporter. You can find it in here, in [PRUSALINK.md](docs/readme/prusalink/PRUSALINK.md)
 
-## Running 
+## Exporter metrics
+
+`/metrics` has the metrics of the exporter itself:
+
+- `prusa_exporter_build_info` and the Go and process metrics.
+- `prusa_exporter_prusalink_request_duration_seconds{printer_address,endpoint,code}`: each HTTP request to PrusaLink. `code="401"` is a digest challenge. The exporter keeps the challenge, so it occurs one time for each printer.
+- `prusa_exporter_udp_packets_received_total`, `prusa_exporter_udp_received_bytes_total`, `prusa_exporter_udp_read_errors_total`, `prusa_exporter_udp_invalid_messages_total`.
+- `prusa_exporter_udp_points_total{result}`: `stored`, `parse_error`, `error_point` or `dropped`. The exporter drops a point of a new series above the series limit (`udp_max_series`, default 10000). It also drops a point with a type that conflicts with the first point of the metric.
+- `prusa_exporter_udp_series` and `prusa_exporter_udp_series_expired_total`.
+- `prusa_exporter_loki_pushes_total{result}` and `prusa_exporter_http_requests_total{handler,code}`.
+
+Scrape `/metrics` as a third job, next to `/metrics/prusalink` and `/metrics/udp`.
+
+## Running
 
 ### Docker
 
-I've prepared docker compose that can be run with proper tools installed. Install Docker [Linux](https://docs.docker.com/engine/install/)/[macOS](https://docs.docker.com/desktop/setup/install/mac-install/). Make sure you installed also docker compose. 
-
-If you choose to sent UDP enable g-code to registered printers in (prusa.yml) - then you have to export environment variable `HOST_IP` that contains IP address of the computer where exporter is running. Code contains a function to detect host IP address but it's not possible to get it running inside of Docker.
+The image is `ghcr.io/anyasabo/prusa_exporter`. It is a distroless static image with only the binary. It runs as a user that is not root. The docker compose file starts the exporter, Prometheus, Loki and Grafana:
 
 ```
-export HOST_IP=192.168.20.20
-docker compose up
+HOST_IP=192.168.20.20 docker compose up
 ```
 
-Or you can use startup script
-
-```
-./start_docker.sh
-```
+`HOST_IP` is the LAN address of this computer. The G-code tells the printer to send its UDP metrics to it. In a container, the exporter cannot find this address.
 
 ### Standalone
 
-Running exporter standalone is certainly possible and you can get binaries here in Releases. It's only way how to run it on Windows without WSL for example. Just be sure that there is prusa.yml right next to the executable. 
+Download a binary from Releases, for Linux (`amd64`, `arm64`, `armv7`, `riscv64`) or macOS (`amd64`, `arm64`). `checksums.txt` has the SHA-256 of each file, and each binary has an SPDX SBOM.
 
-Linux
 ```
-prusa_exporter-linux-amd64
-```
-
-macOS
-```
-prusa_exporter-darwin-arm64
+./prusa_exporter-linux-amd64 --config.file=prusa.yml
 ```
 
-Windows
-```
-prusa_exporter-windows-amd64.exe
-```
+Without `--udp.ip-override`, the G-code uses the local address of the route to each printer.
 
 ### Flags
 
-- config.file
-  - Configuration file for prusa_exporter
-  - Default: ./prusa.yml
-- exporter.metrics-path
-  - Path where to expose Prusa Link metrics
-  - Default: /metrics/prusalink
-- exporter.udp-metrics-path
-  - Path where to expose UDP metrics
-  - Default: /metrics/udp
-- exporter.metrics-port
-  - Port where to expose metrics
-  - Default: 10009
-- prusalink.scrape-timeout
-  - Timeout in seconds to scrape prusalink metrics in seconds
-  - Default: 10
-- log.level
-  - Log level for zerolog
-  - Default: info
-- udp.ip-override
-  - Override the IP address of the server with this value - if empty then exporter will attempt to load IP address from system
-  - Default: ""
-- udp.listen-address
-  - Address where to expose port for gathering metrics. - format <address>:<port>
-  - Default: 0.0.0.0
-- udp.prefix
-  - Prefix for udp metrics
-  - Default: prusa_
-- udp.extra-metrics
-  - Comma separated list of extra udp metrics to expose
-  - Default: ""
-- udp.all-metrics
-  - Expose all udp metrics. SEVERELY IMPACT CPU CAPABILITIES OF THE PRINTER!
-  - Default: false
-- udp.gcode-enabled
-  - Enable generating and sending metrics gcode
-  - Default: true
+Run `prusa_exporter --help` for the full list.
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--config.file` | `prusa.yml` | Configuration file |
+| `--web.listen-address` | `:10009` | HTTP address. Repeat the flag for more addresses |
+| `--web.config.file` | | [Web configuration](https://github.com/prometheus/exporter-toolkit/blob/master/docs/web-configuration.md) for TLS and basic auth |
+| `--web.telemetry-path` | `/metrics` | Metrics of the exporter itself |
+| `--exporter.metrics-path` | `/metrics/prusalink` | PrusaLink metrics |
+| `--exporter.udp-metrics-path` | `/metrics/udp` | UDP metrics |
+| `--udp.listen-address` | `:8514` | UDP address for the metrics of the printers |
+| `--udp.prefix` | `prusa_` | Prefix of the UDP metric names |
+| `--udp.gcode-enabled` | `true` | At start, send the G-code that enables the UDP metrics. `--no-udp.gcode-enabled` disables it |
+| `--udp.ip-override` | | Address of the exporter in the G-code |
+| `--udp.extra-metrics` | | Comma-separated UDP metrics to enable in addition to the defaults |
+| `--udp.all-metrics` | `false` | Enable all UDP metrics. This makes the printer slow |
+| `--loki.push-url` | | Loki push URL for the job thumbnail. Empty disables the push |
+| `--log.level` | `info` | `debug`, `info`, `warn` or `error` |
+| `--log.format` | `logfmt` | `logfmt` or `json` |
+
+### Changes from 2.0.0
+
+- Removed flags: `--exporter.metrics-port` (use `--web.listen-address`), `--prusalink.scrape-timeout` (use `prusalink_scrape_budget` in `prusa.yml`), `--loki.enabled` (set `--loki.push-url`).
+- Renamed metrics: `prusa_status_info` is `prusa_printer_state`, `prusa_job` is `prusa_job_info`, `prusa_axis` is `prusa_axis_position_meters`, `prusa_mmu` is `prusa_mmu_enabled`, `prusa_last_push_timestamp` is `prusa_last_push_timestamp_seconds`. `prusa_files_count` is removed.
+- `prusa_material_info` is always 1.
+- The default `common_labels` has no job labels.
+- The logs are logfmt by default. Use `--log.format=json` for JSON.
+
+## Development
+
+[mise](https://mise.jdx.dev) installs the pinned tools of [mise.toml](mise.toml). CI runs the same tasks.
+
+```
+mise install
+mise run ci               # linters, go mod tidy check, tests with -race, govulncheck
+mise run fuzz             # the fuzz tests of the UDP parser (FUZZTIME=30s)
+mise run build            # binary for this platform in dist/
+mise run release-dry-run  # all binaries, checksums and SBOMs in dist/
+```
+
+A tag `vX.Y.Z` starts the release workflow. GoReleaser makes the GitHub release, and ko pushes the image. The builds are reproducible: the same commit gives the same binary. Renovate keeps the Go modules, the tools in `mise.toml`, the action SHAs and the base image digest current.
 
 ## Dashboards
 
@@ -238,7 +259,7 @@ That is correct. Don't affraid, it's not going to print anything, just start the
 
 ## My printer has UDP metrics host set as 172.x.x.x
 
-That is because you haven't stared the docker compose with `start_docker.sh`. This script will export HOST_IP address and `docker-compose` will pass it into exporter.
+In a container, the exporter cannot find the address of the host. When you start docker compose, set `HOST_IP`: `HOST_IP=192.168.20.20 docker compose up`.
 
 ## Can I enable all UDP metrics?
 
@@ -272,27 +293,7 @@ UDP metrics have by default 1 second of resultion while Prusa Link are scraped e
 
 ## Can I run the exporter on Raspberry Pi?
 
-Yes, I build binaries for 
-
-Linux
-- amd64
-- arm64
-- risc64
-- arm
-
-macOS
-- arm64
-- amd64
-
-Windows
-- arm64
-- amd64
-
-And images for
-
-- linux/amd64
-- linux/arm64
-- linux/arm/v7
+Yes. There are binaries for Linux `amd64`, `arm64`, `armv7` and `riscv64`, and images for `linux/amd64`, `linux/arm64` and `linux/arm/v7`.
 
 ## What UDP metrics are enabled by default?
 

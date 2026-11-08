@@ -505,17 +505,7 @@
             "fixedColor": "orange",
             "mode": "palette-classic"
           },
-          "mappings": [
-            {
-              "options": {
-                "4": {
-                  "color": "semi-dark-green",
-                  "index": 0
-                }
-              },
-              "type": "value"
-            }
-          ],
+          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -568,7 +558,7 @@
           "disableTextWrap": false,
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "avg by(printer_state) (prusa_status_info{printer_address=\"$printer_address\"})",
+          "expr": "max by(printer_state) (prusa_printer_state{printer_address=\"$printer_address\"} == 1)",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": true,
@@ -1010,7 +1000,7 @@
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "max by(printer_name) (prusa_mmu{printer_address=\"$printer_address\"})",
+          "expr": "max by(printer_name) (prusa_mmu_enabled{printer_address=\"$printer_address\"})",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "legendFormat": "__auto",
@@ -1656,7 +1646,7 @@
               },
               {
                 "color": "semi-dark-red",
-                "value": 1e-8
+                "value": 1e-08
               }
             ]
           },
@@ -1773,7 +1763,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "prusa_status_info{printer_address=\"$printer_address\"} == 4",
+          "expr": "prusa_job_info{printer_address=\"$printer_address\"}",
           "instant": true,
           "interval": "",
           "legendFormat": "{{printer_job_name}}",

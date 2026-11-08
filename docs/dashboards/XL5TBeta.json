@@ -1770,17 +1770,7 @@
             "fixedColor": "orange",
             "mode": "palette-classic"
           },
-          "mappings": [
-            {
-              "options": {
-                "4": {
-                  "color": "semi-dark-green",
-                  "index": 0
-                }
-              },
-              "type": "value"
-            }
-          ],
+          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1833,7 +1823,7 @@
           "disableTextWrap": false,
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "avg by(printer_state) (prusa_status_info{printer_address=\"$printer_address\"})",
+          "expr": "max by(printer_state) (prusa_printer_state{printer_address=\"$printer_address\"} == 1)",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": true,
@@ -2917,7 +2907,7 @@
         {
           "editorMode": "code",
           "exemplar": false,
-          "expr": "prusa_status_info{printer_address=\"$printer_address\"} == 4",
+          "expr": "prusa_job_info{printer_address=\"$printer_address\"}",
           "instant": false,
           "interval": "",
           "legendFormat": "{{printer_job_name}}",

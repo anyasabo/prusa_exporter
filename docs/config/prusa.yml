@@ -1,7 +1,9 @@
 printers:
   - address: <ip_address_of_printer>
+    # Use apikey, or username and password.
     username: maker
     password: <password>
+    # apikey: <api_key>
     name: <your_printer_name> # it's optional, only showed in Grafana dashboard
     type: MINI # MK35 / MK35S / MK39 / MK39S / MK4 / MK4S / XL / IX / Core One / Core One L
 
@@ -10,6 +12,14 @@ printers:
 #   udp_series_ttl: 10m # a UDP gauge or info series without a new point for this time goes away
 #   udp_sample_timestamps: false # add the printer time of the point to each UDP sample (the scraper must honor timestamps)
 #   prusalink_scrape_budget: 8s # maximum time for the PrusaLink requests of one printer in one scrape
+#   udp_max_series: 10000 # the exporter drops the points of new UDP series above this number
 #   # Event metrics (v=T) of the firmware. The first packet of a printer makes prusa_<name>_total at 0
 #   # for each name. An event that is not in the list gets its counter with its first point. [] disables it.
 #   udp_event_metrics: [app_start, crash_repeated, maintask_loop, modbus_reqfail, power_panic, probe_start]
+
+# Optional settings of the PrusaLink metrics.
+# prusalink:
+#   # Labels on each PrusaLink metric. The job labels printer_job_name and printer_job_path make new
+#   # series for each print.
+#   common_labels: [printer_address, printer_model, printer_name]
+#   disable_metrics: [] # names of PrusaLink metrics to not expose
