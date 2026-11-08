@@ -100,42 +100,8 @@ func TestRun(t *testing.T) {
 	}))
 	defer printer.Close()
 
-	dir := t.TempDir()
-	cfgFile := filepath.Join(dir, "prusa.yml")
 	cfg := "printers:\n  - address: " + strings.TrimPrefix(printer.URL, "http://") + "\n    apikey: k\n    name: P\n    type: MK4\n"
-	if err := os.WriteFile(cfgFile, []byte(cfg), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	httpAddr, udpAddr := freePort(t, "tcp"), freePort(t, "udp")
-	app := kingpin.New(name, "")
-	f, err := parseFlags(app, []string{
-		"--config.file=" + cfgFile,
-		"--web.listen-address=" + httpAddr,
-		"--udp.listen-address=" + udpAddr,
-		"--no-udp.gcode-enabled",
-		"--web.enable-pprof",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	ctx, cancel := context.WithCancel(t.Context())
-	done := make(chan error, 1)
-	go func() { done <- run(ctx, f, slog.New(slog.DiscardHandler)) }()
-
-	base := "http://" + httpAddr
-	deadline := time.Now().Add(10 * time.Second)
-	for {
-		req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, base+"/", nil)
-		if res, err := http.DefaultClient.Do(req); err == nil {
-			_ = res.Body.Close()
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("the exporter did not start")
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+	base, udpAddr, stop := startExporter(t, cfg, "--web.enable-pprof")
 
 	conn, err := (&net.Dialer{}).DialContext(t.Context(), "udp", udpAddr)
 	if err != nil {
@@ -159,7 +125,7 @@ func TestRun(t *testing.T) {
 			t.Errorf("GET %s has no %q:\n%s", check.path, check.want, body)
 		}
 	}
-	deadline = time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(5 * time.Second)
 	for !strings.Contains(get(t, base+"/metrics/udp"), `prusa_temp_noz{printer_address="127.0.0.1",printer_mac="AA:BB"} 200`) {
 		if time.Now().After(deadline) {
 			t.Fatal("no UDP metric")
@@ -167,14 +133,8 @@ func TestRun(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 
-	cancel()
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Errorf("run() = %v after cancel, want nil", err)
-		}
-	case <-time.After(15 * time.Second):
-		t.Fatal("run() did not return after cancel")
+	if err := stop(); err != nil {
+		t.Errorf("run() = %v after cancel, want nil", err)
 	}
 }
 
@@ -188,4 +148,55 @@ func TestRunBadConfig(t *testing.T) {
 	if err := run(t.Context(), f, slog.New(slog.DiscardHandler)); err == nil {
 		t.Error("run() with a missing config file: no error")
 	}
+}
+
+// startExporter runs the exporter with the config text and the extra flags, and waits
+// until it answers. It returns the HTTP base URL, the UDP address and a function that
+// stops the exporter and returns the error of run().
+func startExporter(t *testing.T, cfg string, args ...string) (base, udpAddr string, stop func() error) {
+	t.Helper()
+	cfgFile := filepath.Join(t.TempDir(), "prusa.yml")
+	if err := os.WriteFile(cfgFile, []byte(cfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	httpAddr := freePort(t, "tcp")
+	udpAddr = freePort(t, "udp")
+	f, err := parseFlags(kingpin.New(name, ""), append([]string{
+		"--config.file=" + cfgFile,
+		"--web.listen-address=" + httpAddr,
+		"--udp.listen-address=" + udpAddr,
+		"--no-udp.gcode-enabled",
+	}, args...))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() { done <- run(ctx, f, slog.New(slog.DiscardHandler)) }()
+
+	base = "http://" + httpAddr
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, base+"/", nil)
+		if res, err := http.DefaultClient.Do(req); err == nil {
+			_ = res.Body.Close()
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the exporter did not start")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	stop = func() error {
+		cancel()
+		select {
+		case err := <-done:
+			return err
+		case <-time.After(15 * time.Second):
+			t.Fatal("run() did not return after cancel")
+			return nil
+		}
+	}
+	return base, udpAddr, stop
 }

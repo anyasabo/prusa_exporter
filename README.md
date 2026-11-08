@@ -91,25 +91,9 @@ An event metric has two sources for its count:
 
 The exporter reads the PrusaLink API at each scrape. The requests for one printer stop after `prusalink_scrape_budget` (default 8 s), or before the scrape timeout of the scraper (header `X-Prometheus-Scrape-Timeout-Seconds`), whichever is first. A key in `prusa.yml` that the exporter does not know is an error.
 
-| Metric | Labels | Description |
-| --- | --- | --- |
-| `prusa_up` | printer | 1 if all PrusaLink requests of the scrape succeeded, else 0 |
-| `prusa_scrape_duration_seconds` | printer | Duration of the PrusaLink requests of the scrape |
-| `prusa_printer_state` | common, `printer_state` | 1 for the current state (`IDLE`, `BUSY`, `PRINTING`, `PAUSED`, `FINISHED`, `STOPPED`, `ERROR`, `ATTENTION`, `READY`, `UNKNOWN`), else 0 |
-| `prusa_job_info` | printer, `printer_job_name`, `printer_job_path` | 1 during a print. No series without a job |
-| `prusa_info` | common, version and identity labels | Always 1 |
-| `prusa_temperature_celsius`, `prusa_temperature_target_celsius` | common, `printer_heated_element` | Bed and nozzle (`tool0`) |
-| `prusa_axis_position_meters` | common, `printer_axis` | Position of x, y and z |
-| `prusa_fan_speed_rpm` | common, `fan` | Hotend and print fan |
-| `prusa_print_flow_ratio`, `prusa_print_speed_ratio` | common | 1 is 100 % |
-| `prusa_printing_progress_ratio` | common | From 0 to 1 |
-| `prusa_print_time_seconds`, `prusa_printing_time_remaining_seconds` | common | Time of the current print |
-| `prusa_nozzle_size_meters` | common | Diameter of the nozzle |
-| `prusa_mmu_enabled` | common | 1 if the MMU is enabled |
-| `prusa_material_info` | common, `printer_filament` | Always 1. `---` if no filament is loaded |
-| `prusa_udp_metrics_gcode_sent` | printer | 1 after the G-code that enables the UDP metrics ran |
+[docs/metrics.md](docs/metrics.md) lists all metrics with their types and labels.
 
-"printer" is `printer_address`, `printer_model` and `printer_name`. "common" is the list in `prusalink.common_labels`. The default is the printer labels. The job labels `printer_job_name` and `printer_job_path` make new series for each print. Add them only for a specific need. `prusalink.disable_metrics` removes metrics by name.
+Most PrusaLink metrics have the labels in `prusalink.common_labels`. The default is `printer_address`, `printer_model` and `printer_name`. The job labels `printer_job_name` and `printer_job_path` make new series for each print. Add them only for a specific need. `prusalink.disable_metrics` removes metrics by name.
 
 ### Guide how to get infomration from the printer
 
@@ -117,16 +101,7 @@ I've prepared quick guide where you can learn how to get credentials and IP addr
 
 ## Exporter metrics
 
-`/metrics` has the metrics of the exporter itself:
-
-- `prusa_exporter_build_info` and the Go and process metrics.
-- `prusa_exporter_prusalink_request_duration_seconds{printer_address,endpoint,code}`: each HTTP request to PrusaLink. `code="401"` is a digest challenge. The exporter keeps the challenge, so it occurs one time for each printer.
-- `prusa_exporter_udp_packets_received_total`, `prusa_exporter_udp_received_bytes_total`, `prusa_exporter_udp_read_errors_total`, `prusa_exporter_udp_invalid_messages_total`.
-- `prusa_exporter_udp_points_total{result}`: `stored`, `parse_error`, `error_point` or `dropped`. The exporter drops a point of a new series above the series limit (`udp_max_series`, default 10000). It also drops a point with a type that conflicts with the first point of the metric.
-- `prusa_exporter_udp_series` and `prusa_exporter_udp_series_expired_total`.
-- `prusa_exporter_loki_pushes_total{result}` and `prusa_exporter_http_request_duration_seconds{handler,code}`.
-
-Scrape `/metrics` as a third job, next to `/metrics/prusalink` and `/metrics/udp`.
+`/metrics` has the metrics of the exporter itself: the build info, the Go and process metrics, the duration of each PrusaLink request and of each scrape, and counters for the UDP receiver. [docs/metrics.md](docs/metrics.md) lists them. Scrape `/metrics` as a third job, next to `/metrics/prusalink` and `/metrics/udp`.
 
 ## Running
 

@@ -87,8 +87,9 @@ There is no global state and no default registry.
 
 - **Metric names and labels are a contract.** The dashboards in `docs/dashboards/` and the
   homeserver (`~/dotfiles/homeserver`: dashboards, alert rules, `scripts/print-recorder`) query
-  them. The tests compare full expositions with `testutil.CollectAndCompare`, so a rename
-  changes a test. Then update the README metric table, "Changes from 2.0.0" and the dashboards.
+  them. `TestMetricsReference` generates `docs/metrics.md` from the real output and fails when
+  the output changes. To write it again: `mise exec -- go test -run TestMetricsReference -update .`
+  Then update "Changes from 2.0.0" in the README and the dashboards.
 - `prusa.yml` is strict: an unknown key is an error. `exporter.scrape_timeout` and
   `exporter.log_level` are accepted and ignored, because old files have them.
   `docs/config/prusa.yml` must stay valid (`TestSampleConfig`).
