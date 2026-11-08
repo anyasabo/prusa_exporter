@@ -9,6 +9,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
+	"gopkg.in/mcuadros/go-syslog.v2/format"
 )
 
 // gatherSamples returns each series of reg as "name{k=v,...}" with its value.
@@ -223,6 +224,46 @@ func TestRecordPointStrings(t *testing.T) {
 	}
 	if got := samples["prusa_tmc_read{ax=X,printer_mac=ABC123}"]; got != 5 {
 		t.Errorf("prusa_tmc_read = %v, want 5. All: %v", got, samples)
+	}
+}
+
+// processLines sends one message with lines to process, as the printer does.
+func processLines(lines ...string) {
+	msg := "msg=1,tm=1000000,v=4 " + strings.Join(lines, "\n") + "\n"
+	process(format.LogParts{
+		"hostname": "ABC123",
+		"client":   "192.168.1.100:5000",
+		"message":  msg,
+	}, "prusa_")
+}
+
+// An error point is dropped and counted. It must not make a series.
+func TestProcessErrorPoints(t *testing.T) {
+	reg := newTestRegistry(t)
+
+	processLines(
+		`temp_bed v=60.000000 10`,
+		`tmc_read error="value_too_long" 20`,
+		`tmc_read error="a, b" 30`,
+		`fsensor error="value too long" 40`,
+	)
+
+	samples := gatherSamples(t, reg)
+	labels := "printer_address=192.168.1.100,printer_mac=ABC123"
+	want := map[string]float64{
+		"prusa_temp_bed{" + labels + "}":                               60,
+		"prusa_udp_point_errors_total{metric=tmc_read," + labels + "}": 2,
+		"prusa_udp_point_errors_total{metric=fsensor," + labels + "}":  1,
+	}
+	for k, v := range want {
+		if got, ok := samples[k]; !ok || got != v {
+			t.Errorf("series %s = %v (present %v), want %v. All: %v", k, got, ok, v, samples)
+		}
+	}
+	for k := range samples {
+		if strings.Contains(k, "_error{") {
+			t.Errorf("error point made the series %s", k)
+		}
 	}
 }
 

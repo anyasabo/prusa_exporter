@@ -19,6 +19,13 @@ var (
 		},
 		[]string{"printer_mac", "printer_address"},
 	)
+	pointErrors = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "prusa_udp_point_errors_total",
+			Help: "Number of error points (error=\"...\") from the printer firmware, by metric. The exporter drops these points.",
+		},
+		[]string{"metric", "printer_mac", "printer_address"},
+	)
 	udpRegistry *prometheus.Registry
 
 	// collector holds the series made from the UDP points. Init sets it.
@@ -31,8 +38,10 @@ func Init(udpMainRegistry *prometheus.Registry) {
 	udpRegistry = udpMainRegistry
 	collector = newUDPCollector()
 	lastPush.Reset()
+	pointErrors.Reset()
 
 	udpRegistry.MustRegister(lastPush)
+	udpRegistry.MustRegister(pointErrors)
 	udpRegistry.MustRegister(collector)
 }
 

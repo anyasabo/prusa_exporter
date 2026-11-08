@@ -23,7 +23,8 @@ func process(data format.LogParts, prefix string) {
 		return
 	}
 	received := time.Now()
-	lastPush.WithLabelValues(mac, strings.Split(ip, ":")[0]).Set(float64(received.Unix())) // Set the last push timestamp
+	address := strings.Split(ip, ":")[0]
+	lastPush.WithLabelValues(mac, address).Set(float64(received.Unix())) // Set the last push timestamp
 
 	log.Debug().Msg(fmt.Sprintf("Processing data for printer %s", mac))
 	metrics, err := processMessage(data["message"].(string), mac, prefix, ip)
@@ -39,8 +40,26 @@ func process(data format.LogParts, prefix string) {
 			continue
 		}
 
-		collector.recordPoint(*point, strings.TrimPrefix(point.Measurement, prefix), received)
+		fwName := strings.TrimPrefix(point.Measurement, prefix)
+		if msg, ok := errorMessage(point); ok {
+			// The firmware sends "name error=\"...\"" when it cannot record a value.
+			pointErrors.WithLabelValues(fwName, mac, address).Inc()
+			log.Debug().Msgf("Printer %s: error point for metric %s: %s", mac, fwName, msg)
+			continue
+		}
+
+		collector.recordPoint(*point, fwName, received)
 	}
+}
+
+// errorMessage returns the message of an error point. An error point has only the
+// field "error" with a string value.
+func errorMessage(p *point) (string, bool) {
+	if len(p.Fields) != 1 {
+		return "", false
+	}
+	msg, ok := p.Fields["error"].(string)
+	return msg, ok
 }
 
 // processIdentifiers returns the MAC address and ip from the ingested data
@@ -132,7 +151,7 @@ func parseLineProtocol(line string) (*point, error) {
 	}
 
 	fieldStr := parts[1]
-	fieldParts := strings.Split(fieldStr, ",")
+	fieldParts := splitFields(fieldStr)
 	for _, field := range fieldParts {
 		kv := strings.SplitN(field, "=", 2)
 		if len(kv) != 2 {
@@ -171,6 +190,27 @@ func parseLineProtocol(line string) (*point, error) {
 	}
 
 	return p, nil
+}
+
+// splitFields splits the field set at each comma that is not in a quoted string.
+func splitFields(s string) []string {
+	var r []string
+	start := 0
+	quoted := false
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '\\':
+			i++ // skip the escaped character
+		case '"':
+			quoted = !quoted
+		case ',':
+			if !quoted {
+				r = append(r, s[start:i])
+				start = i + 1
+			}
+		}
+	}
+	return append(r, s[start:])
 }
 
 // unquote removes the double quotes around s and the backslash escapes in it.
