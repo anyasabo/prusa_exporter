@@ -67,7 +67,7 @@ I've prepared quick guide where you can learn how to manually activate UDP metri
 
 ### UDP counters
 
-The exporter makes these counters at 0 when a printer sends its first packet. Thus a dashboard can tell "no events" from "no data". Counters do not expire.
+When a printer sends its first packet, the exporter makes these counters at 0. Thus a dashboard can tell "no events" from "no data". Counters do not expire.
 
 - `prusa_udp_packets_total{printer_mac,printer_address}`: the UDP datagrams from the printer.
 - `prusa_udp_points_total{printer_mac,printer_address}`: the points that the exporter parsed, error points and event points included.
@@ -78,7 +78,7 @@ The exporter makes these counters at 0 when a printer sends its first packet. Th
 An event metric has two sources for its count:
 
 1. Stock firmware sends one point `name v=T` for each event. The exporter counts these points from the time it starts. The rate limit of the firmware and lost UDP packets can drop events.
-2. A firmware can also send the count since boot at a fixed interval, also when the count is 0, as an integer field `n`: `probe_start n=5i <time>`. If the metric is an event metric (it is in `udp_event_metrics`, or the exporter received a `v=T` point for it), `prusa_<name>_total` then shows the value of the printer. After the first `n` point of a printer, the exporter ignores the `v=T` points of that metric for that printer. At the switch, the counter can jump to the value of the printer. After a printer restart, the count goes down to 0. `rate()` and `increase()` see this as a counter reset. For a metric that is not an event metric, the field `n` stays the gauge `prusa_<name>_n`.
+2. At a fixed interval, a firmware can also send the count since boot as an integer field `n`: `probe_start n=5i <time>`. If the count is 0, it sends the count too. An event metric is in `udp_event_metrics`, or the exporter received a `v=T` point for it. For an event metric, `prusa_<name>_total` then shows the value of the printer. After the first `n` point of a printer, the exporter ignores the `v=T` points of that metric for that printer. At the switch, the counter can jump to the value of the printer. After a printer restart, the count goes down to 0. `rate()` and `increase()` see this as a counter reset. For a metric that is not an event metric, the field `n` stays the gauge `prusa_<name>_n`.
 
 ## Prusa Link Metrics
 
