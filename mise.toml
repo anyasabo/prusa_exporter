@@ -1,0 +1,9 @@
+# Tool versions for local development and CI. Renovate keeps them current.
+# Install: `mise install`. List the tasks: `mise tasks`.
+[tools]
+go = "1.27.3"
+golangci-lint = "2.15.0"
+goreleaser = "2.20.0"
+
+[env]
+CGO_ENABLED = "0"
