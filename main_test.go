@@ -113,6 +113,7 @@ func TestRun(t *testing.T) {
 		"--web.listen-address=" + httpAddr,
 		"--udp.listen-address=" + udpAddr,
 		"--no-udp.gcode-enabled",
+		"--web.enable-pprof",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -152,6 +153,7 @@ func TestRun(t *testing.T) {
 		{"/metrics", "go_goroutines "},
 		{"/metrics", `prusa_exporter_prusalink_request_duration_seconds_count{code="200",endpoint="/api/v1/status"`},
 		{"/", "Exporter metrics"},
+		{"/debug/pprof/", "goroutine"},
 	} {
 		if body := get(t, base+check.path); !strings.Contains(body, check.want) {
 			t.Errorf("GET %s has no %q:\n%s", check.path, check.want, body)

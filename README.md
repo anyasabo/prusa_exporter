@@ -169,6 +169,7 @@ Run `prusa_exporter --help` for the full list.
 | `--udp.extra-metrics` | | A UDP metric to enable in addition to the defaults. Repeat the flag for more metrics |
 | `--udp.all-metrics` | `false` | Enable all UDP metrics. This makes the printer slow |
 | `--loki.push-url` | | Loki push URL for the job thumbnail. Empty disables the push |
+| `--web.enable-pprof` | `false` | Serve the Go profiles on `/debug/pprof/` |
 | `--log.level` | `info` | `debug`, `info`, `warn` or `error` |
 | `--log.format` | `logfmt` | `logfmt` or `json` |
 

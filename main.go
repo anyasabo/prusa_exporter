@@ -10,8 +10,10 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -46,6 +48,7 @@ type flags struct {
 	gcodeAll       bool
 	gcodeExtra     []string
 	lokiPushURL    string
+	enablePprof    bool
 	webFlags       *web.FlagConfig
 	promslogConfig promslog.Config
 }
@@ -63,6 +66,7 @@ func parseFlags(app *kingpin.Application, args []string) (*flags, error) {
 	app.Flag("udp.all-metrics", "Enable all UDP metrics in the G-code. This makes the printer slow.").BoolVar(&f.gcodeAll)
 	app.Flag("udp.extra-metrics", "A UDP metric to enable in the G-code, in addition to the default metrics. Repeat the flag for more metrics.").PlaceHolder("METRIC").StringsVar(&f.gcodeExtra)
 	app.Flag("loki.push-url", "Loki push URL for the job thumbnail, for example http://loki:3100/loki/api/v1/push. Empty disables the push.").PlaceHolder("URL").StringVar(&f.lokiPushURL)
+	app.Flag("web.enable-pprof", "Serve the Go profiles on /debug/pprof/. Protect them with --web.config.file if the address is not private.").BoolVar(&f.enablePprof)
 	f.webFlags = kingpinflag.AddFlags(app, ":10009")
 	promslogflag.AddFlags(app, &f.promslogConfig)
 	app.Version(version.Print(name))
@@ -166,6 +170,7 @@ func run(ctx context.Context, f *flags, logger *slog.Logger) error {
 		Name:        name,
 		Description: "Prometheus exporter for Prusa printers. UDP metrics on " + f.udpListen + ".",
 		Version:     version.Info(),
+		Profiling:   strconv.FormatBool(f.enablePprof),
 		Links: []web.LandingLinks{
 			{Address: f.prusaLinkPath, Text: "PrusaLink metrics"},
 			{Address: f.udpPath, Text: "UDP metrics"},
@@ -176,6 +181,13 @@ func run(ctx context.Context, f *flags, logger *slog.Logger) error {
 		return fmt.Errorf("landing page: %w", err)
 	}
 	mux.Handle("/", landing)
+	if f.enablePprof {
+		mux.HandleFunc("/debug/pprof/", pprof.Index)
+		mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+		mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+		mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+		mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	}
 	server := &http.Server{
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
