@@ -188,10 +188,23 @@ func sortedKeys(m map[string]string) []string {
 	return keys
 }
 
-// getSeries returns the series for key. It makes the family and the series
-// (with name and labels) if they do not exist. It returns nil if the series is not valid, for example if the
-// family has a different kind. The caller holds c.mu.
+// reservedNames are the metrics of the UDP registry that the collector does not make.
+// A firmware metric with one of these names would make each scrape fail.
+var reservedNames = map[string]bool{
+	"prusa_last_push_timestamp":            true,
+	"prusa_udp_point_errors_total":         true,
+	"promhttp_metric_handler_errors_total": true,
+}
+
+// getSeries returns the series for key. It makes the family and the series (with
+// name and labels) if they do not exist. It returns nil if the series is not valid,
+// for example if the family has a different kind. The caller holds c.mu.
 func (c *udpCollector) getSeries(key, name string, kind metricKind, help string, labels map[string]string) *series {
+	if reservedNames[name] {
+		c.warnOnce(name, "UDP metric %s has a reserved name. The exporter ignores it.", name)
+		return nil
+	}
+
 	fam, ok := c.families[name]
 	if !ok {
 		fam = &family{name: name, help: help, kind: kind}
@@ -271,7 +284,7 @@ func (c *udpCollector) recordPoint(p point, fwName string, received time.Time) {
 // label value, and each tag set has only one series. The caller holds c.mu.
 func (c *udpCollector) recordInfo(name, help string, tags map[string]string, str string, received, sampled time.Time) {
 	key := seriesKey(name, tags)
-	if old, ok := c.series[key]; ok && old.info != str {
+	if old, ok := c.series[key]; ok && old.family.kind == kindInfo && old.info != str {
 		delete(c.series, key)
 	}
 

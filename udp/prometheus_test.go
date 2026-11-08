@@ -374,6 +374,33 @@ func TestNoSampleTimestamps(t *testing.T) {
 	}
 }
 
+// A point that needs a different type than the first point of the metric, or that has
+// a reserved name, is ignored. The scrape must not fail.
+func TestRecordPointConflicts(t *testing.T) {
+	reg := newTestRegistry(t)
+	now := time.Now()
+
+	record := func(line, fwName string) {
+		collector.recordPoint(mustParse(t, line), fwName, now)
+	}
+	record("prusa_x,printer_mac=ABC123 v=1.5 0", "x")
+	record(`prusa_x_info,printer_mac=ABC123 v=2.5 0`, "x_info")
+	record(`prusa_x,printer_mac=ABC123 v="text" 0`, "x")
+	record("prusa_udp_point_errors v=T 0", "udp_point_errors")
+	record("prusa_last_push_timestamp v=1.0 0", "last_push_timestamp")
+
+	samples := gatherSamples(t, reg)
+	if got := samples["prusa_x{printer_mac=ABC123}"]; got != 1.5 {
+		t.Errorf("prusa_x = %v, want 1.5", got)
+	}
+	if got := samples["prusa_x_info{printer_mac=ABC123}"]; got != 2.5 {
+		t.Errorf("prusa_x_info = %v, want 2.5 (the first point wins). All: %v", got, samples)
+	}
+	if _, ok := samples["prusa_x_info{printer_mac=ABC123,value=text}"]; ok {
+		t.Error("the string point must not join the gauge family prusa_x_info")
+	}
+}
+
 func TestConcurrentRecordPoint(t *testing.T) {
 	reg := newTestRegistry(t)
 
