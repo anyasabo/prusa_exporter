@@ -33,27 +33,30 @@ type metric struct {
 	common bool
 }
 
+// printerLabels identify a printer on the metrics without the common labels.
+var printerLabels = []string{config.LabelAddress, config.LabelModel, config.LabelName}
+
 // The metrics of the collector. The metrics with common=false have fixed printer
 // labels, because the scraper must find them also without the job labels.
 var (
 	mUp = metric{
 		"prusa_up", "1 if all PrusaLink requests of the scrape succeeded, else 0.",
-		[]string{"printer_address", "printer_model", "printer_name"},
+		printerLabels,
 		false,
 	}
 	mScrapeDuration = metric{
 		"prusa_scrape_duration_seconds", "Duration of the PrusaLink requests of the scrape.",
-		[]string{"printer_address", "printer_model", "printer_name"},
+		printerLabels,
 		false,
 	}
 	mGcodeSent = metric{
 		"prusa_udp_metrics_gcode_sent", "1 if the exporter sent and started the G-code that enables the UDP metrics, else 0.",
-		[]string{"printer_address", "printer_model", "printer_name"},
+		printerLabels,
 		false,
 	}
 	mJob = metric{
 		"prusa_job_info", "The current print job. The value is always 1. There is no series if there is no job.",
-		[]string{"printer_address", "printer_model", "printer_name", "printer_job_name", "printer_job_path"},
+		slices.Concat(printerLabels, []string{config.LabelJobName, config.LabelJobPath}),
 		false,
 	}
 
@@ -299,7 +302,7 @@ func (e *Exporter) fetch(ctx context.Context, c *Client) (snapshot, error) {
 
 func (e *Exporter) collectTarget(ctx context.Context, t *Target, ch chan<- prometheus.Metric) {
 	p := t.Client.Printer
-	logger := e.logger.With("printer_address", p.Address, "printer_name", p.Name)
+	logger := e.logger.With(config.LabelAddress, p.Address, config.LabelName, p.Name)
 	fixed := []string{p.Address, p.Type, p.Name}
 	em := emitter{e: e, ch: ch}
 
@@ -370,15 +373,15 @@ func commonValues(names []string, p config.Printer, jobName, jobPath string) []s
 	values := make([]string, len(names))
 	for i, l := range names {
 		switch l {
-		case "printer_address":
+		case config.LabelAddress:
 			values[i] = p.Address
-		case "printer_model":
+		case config.LabelModel:
 			values[i] = p.Type
-		case "printer_name":
+		case config.LabelName:
 			values[i] = p.Name
-		case "printer_job_name":
+		case config.LabelJobName:
 			values[i] = jobName
-		case "printer_job_path":
+		case config.LabelJobPath:
 			values[i] = jobPath
 		}
 	}

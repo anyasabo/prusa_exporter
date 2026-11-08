@@ -14,6 +14,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+// The label names that identify a printer on the UDP metrics.
+const (
+	labelMAC     = "printer_mac"
+	labelAddress = "printer_address"
+)
+
+var printerLabels = []string{labelMAC, labelAddress}
+
 const (
 	lastPushName       = "prusa_last_push_timestamp_seconds"
 	pointErrorsName    = "prusa_udp_point_errors_total"
@@ -25,21 +33,21 @@ const (
 var (
 	lastPushDesc = prometheus.NewDesc(lastPushName,
 		"Time of the last UDP message from the printer.",
-		[]string{"printer_mac", "printer_address"}, nil)
+		printerLabels, nil)
 	pointErrorsDesc = prometheus.NewDesc(pointErrorsName,
 		"Number of error points (error=\"...\") from the printer firmware, by metric. The exporter drops these points.",
-		[]string{"metric", "printer_mac", "printer_address"}, nil)
+		slices.Concat([]string{"metric"}, printerLabels), nil)
 	// The first packet of a printer makes the counters below at 0, so that a dashboard
 	// can tell "no points" from "no series".
 	pointErrorsAllDesc = prometheus.NewDesc(pointErrorsAllName,
 		"Number of error points (error=\"...\") from the printer firmware, all metrics. The exporter drops these points. "+pointErrorsName+" has the count for each metric.",
-		[]string{"printer_mac", "printer_address"}, nil)
+		printerLabels, nil)
 	pointsDesc = prometheus.NewDesc(pointsName,
 		"Number of points from the printer firmware that the exporter parsed, error points and event points included.",
-		[]string{"printer_mac", "printer_address"}, nil)
+		printerLabels, nil)
 	packetsDesc = prometheus.NewDesc(packetsName,
 		"Number of UDP datagrams from the printer that the exporter received.",
-		[]string{"printer_mac", "printer_address"}, nil)
+		printerLabels, nil)
 )
 
 // reservedNames are the metrics of the collector that are not firmware metrics.
@@ -287,11 +295,11 @@ func (c *Collector) record(mac, address string, points []*point, received time.T
 			c.pointErrors[errorKey{p.Name, pk}]++
 			st.errors++
 			c.metrics.points.WithLabelValues(resultErrorPoint).Inc()
-			c.logger.Debug("Error point from the printer", "printer_mac", mac, "metric", p.Name, "error", msg)
+			c.logger.Debug("Error point from the printer", labelMAC, mac, "metric", p.Name, "error", msg)
 			continue
 		}
-		p.Tags["printer_mac"] = mac
-		p.Tags["printer_address"] = address
+		p.Tags[labelMAC] = mac
+		p.Tags[labelAddress] = address
 		if c.recordPoint(p, received) {
 			stored++
 		} else {
@@ -309,7 +317,7 @@ func (c *Collector) printer(pk printerKey) *printerStats {
 	}
 	st := &printerStats{}
 	c.printers[pk] = st
-	labels := map[string]string{"printer_mac": pk.mac, "printer_address": pk.address}
+	labels := map[string]string{labelMAC: pk.mac, labelAddress: pk.address}
 	for _, event := range c.opts.EventMetrics {
 		name := c.opts.Prefix + event + "_total"
 		c.getSeries(seriesKey(name, labels), name, kindCounter, counterHelp(event, "v"), labels)

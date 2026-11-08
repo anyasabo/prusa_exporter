@@ -38,7 +38,7 @@ func NewClientMetrics(reg prometheus.Registerer) *ClientMetrics {
 			Name:    "prusa_exporter_prusalink_request_duration_seconds",
 			Help:    "Duration of the HTTP requests to PrusaLink, including the digest challenges.",
 			Buckets: []float64{0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
-		}, []string{"printer_address", "endpoint", "code"}),
+		}, []string{config.LabelAddress, "endpoint", "code"}),
 	}
 	reg.MustRegister(m.duration)
 	return m
@@ -127,7 +127,7 @@ func (c *Client) Do(ctx context.Context, method, endpoint, path string, body io.
 	ctx = context.WithValue(ctx, endpointKey{}, endpoint)
 	req, err := http.NewRequestWithContext(ctx, method, c.url(path), body)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%s %s: %w", method, path, err)
 	}
 	maps.Copy(req.Header, header)
 	res, err := c.http.Do(req)

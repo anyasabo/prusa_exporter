@@ -26,12 +26,21 @@ const (
 // METRIC_VALUE_EVENT metrics of the Prusa Buddy firmware.
 var DefaultUDPEventMetrics = []string{"app_start", "crash_repeated", "maintask_loop", "modbus_reqfail", "power_panic", "probe_start"}
 
+// The label names of the PrusaLink metrics and the Loki streams.
+const (
+	LabelAddress = "printer_address"
+	LabelModel   = "printer_model"
+	LabelName    = "printer_name"
+	LabelJobName = "printer_job_name"
+	LabelJobPath = "printer_job_path"
+)
+
 // LabelNames are the values that PrusaLink.CommonLabels can have.
-var LabelNames = []string{"printer_address", "printer_model", "printer_name", "printer_job_name", "printer_job_path"}
+var LabelNames = []string{LabelAddress, LabelModel, LabelName, LabelJobName, LabelJobPath}
 
 // DefaultCommonLabels are the common labels if prusa.yml sets none. The job labels
 // are not in the list, because they make new series for each print.
-var DefaultCommonLabels = []string{"printer_address", "printer_model", "printer_name"}
+var DefaultCommonLabels = []string{LabelAddress, LabelModel, LabelName}
 
 // Config is the content of prusa.yml.
 type Config struct {
@@ -88,7 +97,7 @@ type Printer struct {
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path) //nolint:gosec // The operator gives the path.
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read config: %w", err)
 	}
 	return Parse(data)
 }

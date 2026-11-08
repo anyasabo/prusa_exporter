@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/anyasabo/prusa_exporter/internal/config"
 )
 
 // lokiRepushInterval is the time after which the exporter sends the thumbnail of the
@@ -116,21 +118,21 @@ func (p *LokiPusher) send(ctx context.Context, c *Client, jobName, jobPath, imag
 	pr := c.Printer
 	payload, err := json.Marshal(lokiPush{Streams: []lokiStream{{
 		Stream: map[string]string{
-			"job":              "prusa_job_image",
-			"printer_address":  pr.Address,
-			"printer_model":    pr.Type,
-			"printer_name":     pr.Name,
-			"printer_job_name": jobName,
-			"printer_job_path": jobPath,
+			"job":               "prusa_job_image",
+			config.LabelAddress: pr.Address,
+			config.LabelModel:   pr.Type,
+			config.LabelName:    pr.Name,
+			config.LabelJobName: jobName,
+			config.LabelJobPath: jobPath,
 		},
 		Values: [][2]string{{strconv.FormatInt(p.now().UnixNano(), 10), image}},
 	}}})
 	if err != nil {
-		return err
+		return fmt.Errorf("encode the Loki push: %w", err)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.url, bytes.NewReader(payload))
 	if err != nil {
-		return err
+		return fmt.Errorf("loki: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	res, err := p.http.Do(req)
@@ -154,7 +156,7 @@ func recompressPNG(data []byte) ([]byte, error) {
 	}
 	var b bytes.Buffer
 	if err := (&png.Encoder{CompressionLevel: png.BestCompression}).Encode(&b, img); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("encode thumbnail: %w", err)
 	}
 	return b.Bytes(), nil
 }
