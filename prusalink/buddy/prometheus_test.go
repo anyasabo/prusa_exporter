@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/pstrobl96/prusa_exporter/config"
@@ -21,6 +22,8 @@ type mockPrinter struct {
 	// requests counts the requests for each path.
 	requests map[string]int
 	printing bool
+	// delay is the time before each response.
+	delay time.Duration
 }
 
 func newMockPrinter(t *testing.T) (*mockPrinter, config.Printers) {
@@ -41,7 +44,10 @@ func (m *mockPrinter) serve(w http.ResponseWriter, r *http.Request) {
 	m.requests[r.URL.Path]++
 	fail := m.fail[r.URL.Path]
 	printing := m.printing
+	delay := m.delay
 	m.mu.Unlock()
+
+	time.Sleep(delay)
 
 	if fail {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -127,5 +133,23 @@ func TestCollectNozzleSizeInMeters(t *testing.T) {
 	}
 	if got != 0.0004 {
 		t.Errorf("%s = %v, want 0.0004", MetricPrinterNozzleSize, got)
+	}
+}
+
+// All requests of one scrape share the scrape budget. A slow printer gives up=0
+// before the budget ends.
+func TestCollectScrapeBudget(t *testing.T) {
+	m, p := newMockPrinter(t)
+	m.delay = 300 * time.Millisecond
+	cfg := testConfig(p)
+	cfg.Exporter.PrusaLinkScrapeBudget = 500 * time.Millisecond
+
+	start := time.Now()
+	samples := collectSamples(t, cfg)
+	if d := time.Since(start); d > 1500*time.Millisecond {
+		t.Errorf("scrape took %v, want less than the budget plus one request", d)
+	}
+	if up, _ := findSample(samples, MetricPrinterUp); up != 0 {
+		t.Errorf("%s = %v, want 0", MetricPrinterUp, up)
 	}
 }

@@ -10,8 +10,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// DefaultUDPSeriesTTL is the default of ExporterConfig.UDPSeriesTTL.
-const DefaultUDPSeriesTTL = 10 * time.Minute
+const (
+	// DefaultUDPSeriesTTL is the default of ExporterConfig.UDPSeriesTTL.
+	DefaultUDPSeriesTTL = 10 * time.Minute
+	// DefaultPrusaLinkScrapeBudget is the default of ExporterConfig.PrusaLinkScrapeBudget.
+	DefaultPrusaLinkScrapeBudget = 8 * time.Second
+)
 
 // Config struct for the configuration file prusa.yml
 type Config struct {
@@ -37,6 +41,10 @@ type ExporterConfig struct {
 	// UDPSampleTimestamps adds the estimated printer time of the last point to each
 	// UDP sample. The scraper must honor the timestamps.
 	UDPSampleTimestamps bool `yaml:"udp_sample_timestamps"`
+	// PrusaLinkScrapeBudget is the maximum time for all PrusaLink requests of one
+	// printer in one scrape. Keep it below the scrape timeout of the scraper.
+	// Zero or less means DefaultPrusaLinkScrapeBudget.
+	PrusaLinkScrapeBudget time.Duration `yaml:"prusalink_scrape_budget"`
 }
 
 // Printers struct containing the printer configuration
@@ -66,6 +74,9 @@ func LoadConfig(path string, prusaLinkScrapeTimeout int, udpIPOverride string, u
 	config.Exporter.ScrapeTimeout = prusaLinkScrapeTimeout
 	if config.Exporter.UDPSeriesTTL <= 0 {
 		config.Exporter.UDPSeriesTTL = DefaultUDPSeriesTTL
+	}
+	if config.Exporter.PrusaLinkScrapeBudget <= 0 {
+		config.Exporter.PrusaLinkScrapeBudget = DefaultPrusaLinkScrapeBudget
 	}
 	if udpIPOverride != "" {
 		config.Exporter.IPOverride = udpIPOverride

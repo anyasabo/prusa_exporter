@@ -1,6 +1,7 @@
 package prusalink
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -318,7 +319,7 @@ func TestAccessPrinterEndpoint(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := accessPrinterEndpoint(tt.path, tt.printer)
+			result, err := accessPrinterEndpoint(context.Background(), tt.path, tt.printer)
 
 			if tt.expectError {
 				if err == nil {
@@ -366,7 +367,7 @@ func TestPrinterTypes(t *testing.T) {
 func TestHTTPTimeouts(t *testing.T) {
 	// Create a test server that delays responses
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(6 * time.Second) // Delay longer than timeout (5 * 1 = 5 seconds)
+		time.Sleep(2 * time.Second) // Delay longer than the context timeout
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`))
 	}))
@@ -390,7 +391,9 @@ func TestHTTPTimeouts(t *testing.T) {
 		Password: "test_pass",
 	}
 
-	_, err := accessPrinterEndpoint("/api/v1/status", printer)
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	_, err := accessPrinterEndpoint(ctx, "/api/v1/status", printer)
 	if err == nil {
 		t.Error("accessPrinterEndpoint() should timeout but didn't")
 		return

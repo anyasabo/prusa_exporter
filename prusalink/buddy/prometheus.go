@@ -1,6 +1,7 @@
 package prusalink
 
 import (
+	"context"
 	"strings"
 	"sync"
 
@@ -98,14 +99,17 @@ func (c *Collector) metricEnabled(m MetricName) bool {
 }
 
 // NewCollector returns a new Collector for printer metrics
-func NewCollector(config config.Config) *Collector {
-	SetConfiguration(config)
-	commonLabels := config.PrusaLink.CommonLabels
+func NewCollector(cfg config.Config) *Collector {
+	if cfg.Exporter.PrusaLinkScrapeBudget <= 0 {
+		cfg.Exporter.PrusaLinkScrapeBudget = config.DefaultPrusaLinkScrapeBudget
+	}
+	SetConfiguration(cfg)
+	commonLabels := cfg.PrusaLink.CommonLabels
 	if len(commonLabels) == 0 {
 		commonLabels = []string{"printer_address", "printer_model", "printer_name", "printer_job_name", "printer_job_path"}
 	}
 	c := &Collector{
-		configuration:  config,
+		configuration:  cfg,
 		commonLabels:   commonLabels,
 		metricDesc:     map[MetricName]*prometheus.Desc{},
 		metricDisabled: map[MetricName]bool{},
@@ -118,7 +122,7 @@ func NewCollector(config config.Config) *Collector {
 		c.metricDesc[m.Name] = prometheus.NewDesc(string(m.Name), m.Description, m.Labels, nil)
 	}
 
-	for _, m := range config.PrusaLink.DisableMetrics {
+	for _, m := range cfg.PrusaLink.DisableMetrics {
 		c.metricDisabled[MetricName(m)] = true
 	}
 	return c
@@ -142,6 +146,12 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 			defer wg.Done()
 
 			log.Debug().Msg("Printer scraping at " + s.Address)
+
+			// All requests of one scrape share this deadline. Thus the scrape
+			// ends before the scrape timeout of the scraper.
+			ctx, cancel := context.WithTimeout(context.Background(), c.configuration.Exporter.PrusaLinkScrapeBudget)
+			defer cancel()
+
 			printerUp := prometheus.MustNewConstMetric(c.metricDesc[MetricPrinterUp], prometheus.GaugeValue,
 				0, s.Address, s.Type, s.Name)
 
@@ -151,34 +161,34 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 				udpEnabled, s.Address, s.Type, s.Name)
 			ch <- printerUDPEnabled
 
-			job, err := GetJob(s)
+			job, err := GetJob(ctx, s)
 			if err != nil {
 				log.Error().Msg("Error while scraping job endpoint at " + s.Address + " - " + err.Error())
 				ch <- printerUp
 				return
 			}
 
-			printer, err := GetPrinter(s)
+			printer, err := GetPrinter(ctx, s)
 			if err != nil {
 				log.Error().Msg("Error while scraping printer endpoint at " + s.Address + " - " + err.Error())
 				ch <- printerUp
 				return
 			}
 
-			version, err := GetVersion(s)
+			version, err := GetVersion(ctx, s)
 			if err != nil {
 				log.Error().Msg("Error while scraping version endpoint at " + s.Address + " - " + err.Error())
 				ch <- printerUp
 				return
 			}
 
-			status, err := GetStatus(s)
+			status, err := GetStatus(ctx, s)
 
 			if err != nil {
 				log.Error().Msg("Error while scraping status endpoint at " + s.Address + " - " + err.Error())
 			}
 
-			info, err := GetInfo(s)
+			info, err := GetInfo(ctx, s)
 
 			if err != nil {
 				log.Error().Msg("Error while scraping info endpoint at " + s.Address + " - " + err.Error())
@@ -186,7 +196,9 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 
 			if getStateFlag(printer) == 4 { // ensure that printer is printing
 				go func() {
-					image, err := GetJobImage(s, job.Job.File.Path)
+					imageCtx, imageCancel := context.WithTimeout(context.Background(), c.configuration.Exporter.PrusaLinkScrapeBudget)
+					defer imageCancel()
+					image, err := GetJobImage(imageCtx, s, job.Job.File.Path)
 
 					if c.configuration.Exporter.LokiPushURL == "" {
 						log.Debug().Msg("Loki push URL not set, skipping pushing image to Loki")
