@@ -187,6 +187,45 @@ func TestRecordPointEvents(t *testing.T) {
 	}
 }
 
+// A string is an info series. A new string replaces the old label value.
+func TestRecordPointStrings(t *testing.T) {
+	reg := newTestRegistry(t)
+	now := time.Now()
+
+	p := mustParse(t, `prusa_filament,printer_mac=ABC123 v="PLA" 0`)
+	collector.recordPoint(p, "filament", now)
+
+	samples := gatherSamples(t, reg)
+	if got := samples["prusa_filament_info{printer_mac=ABC123,value=PLA}"]; got != 1 {
+		t.Errorf("prusa_filament_info{value=PLA} = %v, want 1. All: %v", got, samples)
+	}
+	if _, ok := samples["prusa_filament{printer_mac=ABC123}"]; ok {
+		t.Error("the old gauge prusa_filament must not exist")
+	}
+
+	p = mustParse(t, `prusa_filament,printer_mac=ABC123 v="PETG" 0`)
+	collector.recordPoint(p, "filament", now)
+
+	samples = gatherSamples(t, reg)
+	if _, ok := samples["prusa_filament_info{printer_mac=ABC123,value=PLA}"]; ok {
+		t.Errorf("the old string PLA is still a series: %v", samples)
+	}
+	if got := samples["prusa_filament_info{printer_mac=ABC123,value=PETG}"]; got != 1 {
+		t.Errorf("prusa_filament_info{value=PETG} = %v, want 1. All: %v", got, samples)
+	}
+
+	// A string field of a custom metric.
+	p = mustParse(t, `prusa_tmc_read,printer_mac=ABC123,ax=X reg=1i,regn="GCONF",value=5i 0`)
+	collector.recordPoint(p, "tmc_read", now)
+	samples = gatherSamples(t, reg)
+	if got := samples["prusa_tmc_read_regn_info{ax=X,printer_mac=ABC123,value=GCONF}"]; got != 1 {
+		t.Errorf("prusa_tmc_read_regn_info = %v, want 1. All: %v", got, samples)
+	}
+	if got := samples["prusa_tmc_read{ax=X,printer_mac=ABC123}"]; got != 5 {
+		t.Errorf("prusa_tmc_read = %v, want 5. All: %v", got, samples)
+	}
+}
+
 func TestConcurrentRecordPoint(t *testing.T) {
 	reg := newTestRegistry(t)
 
@@ -225,18 +264,6 @@ func TestToFloat64(t *testing.T) {
 		{"bool true", true, 1.0},
 		{"bool false", false, 0.0},
 		{"nil", nil, 0.0},
-		{"string PLA", "PLA", 1.0},
-		{"string PETG", "PETG", 2.0},
-		{"string ASA", "ASA", 3.0},
-		{"string PC", "PC", 4.0},
-		{"string PVB", "PVB", 5.0},
-		{"string ABS", "ABS", 6.0},
-		{"string HIPS", "HIPS", 7.0},
-		{"string PP", "PP", 8.0},
-		{"string FLEX", "FLEX", 9.0},
-		{"string PA", "PA", 10.0},
-		{"string ---", "---", -1.0},
-		{"string unknown", "UNKNOWN", 0.0},
 		{"unsupported type", []int{1, 2, 3}, 0.0},
 	}
 

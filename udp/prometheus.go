@@ -42,6 +42,8 @@ const (
 	kindGauge metricKind = iota
 	// kindCounter counts the event points (v=T) of a metric.
 	kindCounter
+	// kindInfo is a gauge with the value 1. The label "value" holds a string.
+	kindInfo
 )
 
 func (k metricKind) valueType() prometheus.ValueType {
@@ -67,6 +69,8 @@ type series struct {
 	labelValues []string
 	value       float64
 	updated     time.Time
+	// info is the string of a kindInfo series.
+	info string
 }
 
 // udpCollector is an unchecked prometheus.Collector. It keeps the last value of each
@@ -136,10 +140,10 @@ func sortedKeys(m map[string]string) []string {
 	return keys
 }
 
-// getSeries returns the series for name and labels. It makes the family and the series
-// if they do not exist. It returns nil if the series is not valid, for example if the
+// getSeries returns the series for key. It makes the family and the series
+// (with name and labels) if they do not exist. It returns nil if the series is not valid, for example if the
 // family has a different kind. The caller holds c.mu.
-func (c *udpCollector) getSeries(name string, kind metricKind, help string, labels map[string]string) *series {
+func (c *udpCollector) getSeries(key, name string, kind metricKind, help string, labels map[string]string) *series {
 	fam, ok := c.families[name]
 	if !ok {
 		fam = &family{name: name, help: help, kind: kind}
@@ -150,7 +154,6 @@ func (c *udpCollector) getSeries(name string, kind metricKind, help string, labe
 		return nil
 	}
 
-	key := seriesKey(name, labels)
 	if s, ok := c.series[key]; ok {
 		return s
 	}
@@ -189,7 +192,8 @@ func (c *udpCollector) recordPoint(p point, fwName string, received time.Time) {
 				log.Debug().Msgf("UDP metric %s: ignore a false boolean", metricName)
 				continue
 			}
-			s := c.getSeries(metricName+"_total", kindCounter, counterHelp(fwName, key), p.Tags)
+			name := metricName + "_total"
+			s := c.getSeries(seriesKey(name, p.Tags), name, kindCounter, counterHelp(fwName, key), p.Tags)
 			if s == nil {
 				continue
 			}
@@ -198,13 +202,50 @@ func (c *udpCollector) recordPoint(p point, fwName string, received time.Time) {
 			continue
 		}
 
-		s := c.getSeries(metricName, kindGauge, gaugeHelp(fwName, key, value), p.Tags)
+		if str, ok := value.(string); ok {
+			c.recordInfo(metricName+"_info", infoHelp(fwName, key), p.Tags, str, received)
+			continue
+		}
+
+		s := c.getSeries(seriesKey(metricName, p.Tags), metricName, kindGauge, gaugeHelp(fwName, key, value), p.Tags)
 		if s == nil {
 			continue
 		}
 		s.value = toFloat64(value)
 		s.updated = received
 	}
+}
+
+// recordInfo stores a string as the label "value" of an info series with the value 1.
+// The tags without the string identify the series. Thus a new string replaces the old
+// label value, and each tag set has only one series. The caller holds c.mu.
+func (c *udpCollector) recordInfo(name, help string, tags map[string]string, str string, received time.Time) {
+	key := seriesKey(name, tags)
+	if old, ok := c.series[key]; ok && old.info != str {
+		delete(c.series, key)
+	}
+
+	labels := make(map[string]string, len(tags)+1)
+	for k, v := range tags {
+		labels[k] = v
+	}
+	labels["value"] = str
+
+	s := c.getSeries(key, name, kindInfo, help, labels)
+	if s == nil {
+		return
+	}
+	s.value = 1
+	s.info = str
+	s.updated = received
+}
+
+// infoHelp returns the help text for a string field.
+func infoHelp(fwName, field string) string {
+	if field == "v" || field == "value" {
+		return fmt.Sprintf("String UDP metric %q from the printer firmware. The label \"value\" holds the last string. The value is always 1.", fwName)
+	}
+	return fmt.Sprintf("String UDP metric %q, field %q, from the printer firmware. The label \"value\" holds the last string. The value is always 1.", fwName, field)
 }
 
 // counterHelp returns the help text for an event field.
@@ -229,8 +270,6 @@ func valueTypeName(value interface{}) string {
 		return "integer"
 	case float64:
 		return "float"
-	case string:
-		return "string"
 	default:
 		return "unknown"
 	}
@@ -252,32 +291,6 @@ func toFloat64(value interface{}) float64 {
 	case nil:
 		log.Warn().Msg("Received nil value, returning 0.0")
 		return 0.0
-	case string:
-		if v == "PLA" {
-			return 1.0
-		} else if v == "PETG" {
-			return 2.0
-		} else if v == "ASA" {
-			return 3.0
-		} else if v == "PC" {
-			return 4.0
-		} else if v == "PVB" {
-			return 5.0
-		} else if v == "ABS" {
-			return 6.0
-		} else if v == "HIPS" {
-			return 7.0
-		} else if v == "PP" {
-			return 8.0
-		} else if v == "FLEX" {
-			return 9.0
-		} else if v == "PA" {
-			return 10.0
-		} else if v == "---" {
-			return -1.0 // special case for "---" to indicate no loaded filament
-		} else {
-			return 0.0 // return for custom
-		}
 	default:
 		log.Warn().Msgf("Unsupported type %T for value %v", value, value)
 		return 0.0
