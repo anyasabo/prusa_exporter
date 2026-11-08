@@ -4,24 +4,36 @@ linters:
   default: standard
   enable:
     - bodyclose
+    - canonicalheader
     - contextcheck
+    - durationcheck
     - errorlint
+    - exhaustive
+    - fatcontext
     - gocritic
     - gosec
     - misspell
+    - modernize
+    - musttag
     - nilerr
+    - nilnesserr
+    - nilnil
     - noctx
     - nolintlint
     - perfsprint
+    - predeclared
     - promlinter
     - revive
     - sloglint
     - thelper
     - tparallel
     - unconvert
+    - unparam
     - usestdlibvars
     - usetesting
   settings:
+    exhaustive:
+      default-signifies-exhaustive: true
     promlinter:
       strict: true
     sloglint:

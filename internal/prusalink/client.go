@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"strconv"
 	"time"
@@ -128,9 +129,7 @@ func (c *Client) Do(ctx context.Context, method, endpoint, path string, body io.
 	if err != nil {
 		return nil, err
 	}
-	for k, v := range header {
-		req.Header[k] = v
-	}
+	maps.Copy(req.Header, header)
 	res, err := c.http.Do(req)
 	if err != nil {
 		return nil, err

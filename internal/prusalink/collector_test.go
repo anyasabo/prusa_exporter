@@ -93,17 +93,17 @@ func gather(t *testing.T, e *Exporter) prometheus.Gatherer {
 	return prometheus.GathererFunc(func() ([]*dto.MetricFamily, error) { return mfs, nil })
 }
 
-func newTestExporter(t *testing.T, f *fakePrusaLink, opts Options) (*Exporter, *Target) {
+func newTestExporter(t *testing.T, f *fakePrusaLink, opts Options) *Exporter {
 	t.Helper()
 	target := &Target{Client: NewClient(f.printer(), NewTransport(), NewClientMetrics(prometheus.NewRegistry()))}
-	return NewExporter([]*Target{target}, opts, discardLogger(), prometheus.NewRegistry()), target
+	return NewExporter([]*Target{target}, opts, discardLogger(), prometheus.NewRegistry())
 }
 
 func TestExporterPrinting(t *testing.T) {
 	t.Parallel()
 	for _, digest := range []bool{true, false} {
 		f := newFakePrusaLink(t, digest)
-		e, _ := newTestExporter(t, f, Options{})
+		e := newTestExporter(t, f, Options{})
 		want := strings.ReplaceAll(printingExposition, "ADDR", f.printer().Address)
 		g := gather(t, e)
 		if err := testutil.GatherAndCompare(g, strings.NewReader(want), MetricNamesExcept("prusa_scrape_duration_seconds")...); err != nil {
@@ -119,7 +119,7 @@ func TestExporterIdle(t *testing.T) {
 	t.Parallel()
 	f := newFakePrusaLink(t, false)
 	f.set("/api/v1/status", "status_idle.json")
-	e, _ := newTestExporter(t, f, Options{})
+	e := newTestExporter(t, f, Options{})
 	g := gather(t, e)
 	if n, _ := testutil.GatherAndCount(g, "prusa_job_info"); n != 0 {
 		t.Errorf("prusa_job_info has %d series while idle, want 0", n)
@@ -144,7 +144,7 @@ func TestExporterUnknownState(t *testing.T) {
 	t.Parallel()
 	f := newFakePrusaLink(t, false)
 	f.setRaw("/api/v1/status", `{"printer":{"state":"FUTURE"}}`)
-	e, _ := newTestExporter(t, f, Options{})
+	e := newTestExporter(t, f, Options{})
 	// A state that is not in States gets its own series.
 	n, err := testutil.GatherAndCount(gather(t, e), "prusa_printer_state")
 	if err != nil || n != len(States)+1 {
@@ -159,7 +159,7 @@ func TestExporterRequestFails(t *testing.T) {
 			t.Parallel()
 			f := newFakePrusaLink(t, false)
 			f.setCode(path, http.StatusInternalServerError)
-			e, _ := newTestExporter(t, f, Options{})
+			e := newTestExporter(t, f, Options{})
 			g := gather(t, e)
 			want := strings.ReplaceAll(`
 # HELP prusa_up 1 if all PrusaLink requests of the scrape succeeded, else 0.
@@ -181,7 +181,7 @@ func TestExporterBadJSON(t *testing.T) {
 	t.Parallel()
 	f := newFakePrusaLink(t, false)
 	f.setRaw("/api/version", `{"api": 2`)
-	e, _ := newTestExporter(t, f, Options{})
+	e := newTestExporter(t, f, Options{})
 	g := gather(t, e)
 	if n, _ := testutil.GatherAndCount(g, "prusa_info"); n != 0 {
 		t.Errorf("prusa_info exposed after a decode error")
@@ -194,7 +194,7 @@ func TestExporterBadJSON(t *testing.T) {
 func TestExporterLabelsAndDisable(t *testing.T) {
 	t.Parallel()
 	f := newFakePrusaLink(t, false)
-	e, _ := newTestExporter(t, f, Options{
+	e := newTestExporter(t, f, Options{
 		CommonLabels:   []string{"printer_name", "printer_job_name"},
 		DisableMetrics: []string{"prusa_info", "prusa_temperature_celsius"},
 	})
@@ -217,7 +217,7 @@ prusa_mmu_enabled{printer_job_name="benchy_0.4n_0.2mm_PLA.bgcode",printer_name="
 func TestDigestChallengeIsReused(t *testing.T) {
 	t.Parallel()
 	f := newFakePrusaLink(t, true)
-	e, _ := newTestExporter(t, f, Options{})
+	e := newTestExporter(t, f, Options{})
 	for range 3 {
 		gather(t, e)
 	}
