@@ -19,7 +19,7 @@ var (
 	t0      = time.Unix(1_700_000_000, 0)
 )
 
-func newTestCollector(t *testing.T, opts Options) (*Collector, *prometheus.Registry) {
+func newTestCollector(t testing.TB, opts Options) (*Collector, *prometheus.Registry) {
 	t.Helper()
 	if opts.Prefix == "" {
 		opts.Prefix = "prusa_"
