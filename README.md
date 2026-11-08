@@ -50,7 +50,7 @@ Prusa Exporter or more known as prusa_exporter is a tool that allows users to ex
 
 **UDP** is configured in printer - Settings -> Network -> Metrics & Log
 
-By default at start of the exporter will send the configuration gcode to the printers that are configured in prusa.yml. The list is already prepared but you can add additional metrics by using flag `udp.extra-metrics="crash,power_panic"`. 
+By default at start of the exporter will send the configuration gcode to the printers that are configured in prusa.yml. The list is already prepared but you can add additional metrics with the repeatable flag `--udp.extra-metrics`, for example `--udp.extra-metrics=crash --udp.extra-metrics=power_panic`. 
 
 - Host => address where prusa_exporter is running aka your computer / server
 - Metrics Port => default 8514 same as prusa_exporter but you can change it
@@ -166,7 +166,7 @@ Run `prusa_exporter --help` for the full list.
 | `--udp.prefix` | `prusa_` | Prefix of the UDP metric names |
 | `--udp.gcode-enabled` | `true` | At start, send the G-code that enables the UDP metrics. `--no-udp.gcode-enabled` disables it |
 | `--udp.ip-override` | | Address of the exporter in the G-code |
-| `--udp.extra-metrics` | | Comma-separated UDP metrics to enable in addition to the defaults |
+| `--udp.extra-metrics` | | A UDP metric to enable in addition to the defaults. Repeat the flag for more metrics |
 | `--udp.all-metrics` | `false` | Enable all UDP metrics. This makes the printer slow |
 | `--loki.push-url` | | Loki push URL for the job thumbnail. Empty disables the push |
 | `--log.level` | `info` | `debug`, `info`, `warn` or `error` |
@@ -174,6 +174,7 @@ Run `prusa_exporter --help` for the full list.
 
 ### Changes from 2.0.0
 
+- `--udp.extra-metrics` takes one metric. Repeat the flag for more metrics: `--udp.extra-metrics=crash --udp.extra-metrics=power_panic`.
 - Removed flags: `--exporter.metrics-port` (use `--web.listen-address`), `--prusalink.scrape-timeout` (use `prusalink_scrape_budget` in `prusa.yml`), `--loki.enabled` (set `--loki.push-url`).
 - Renamed metrics: `prusa_status_info` is `prusa_printer_state`, `prusa_job` is `prusa_job_info`, `prusa_axis` is `prusa_axis_position_meters`, `prusa_mmu` is `prusa_mmu_enabled`, `prusa_last_push_timestamp` is `prusa_last_push_timestamp_seconds`. `prusa_files_count` is removed.
 - `prusa_material_info` is always 1.

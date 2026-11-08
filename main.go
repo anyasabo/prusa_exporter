@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -45,7 +44,7 @@ type flags struct {
 	gcodeEnabled   bool
 	gcodeHost      string
 	gcodeAll       bool
-	gcodeExtra     string
+	gcodeExtra     []string
 	lokiPushURL    string
 	webFlags       *web.FlagConfig
 	promslogConfig promslog.Config
@@ -60,30 +59,31 @@ func parseFlags(app *kingpin.Application, args []string) (*flags, error) {
 	app.Flag("udp.listen-address", "UDP address for the metrics of the printers.").Default(":8514").StringVar(&f.udpListen)
 	app.Flag("udp.prefix", "Prefix of the UDP metric names.").Default("prusa_").StringVar(&f.udpPrefix)
 	app.Flag("udp.gcode-enabled", "At start, send a G-code to each printer that enables its UDP metrics to this exporter.").Default("true").BoolVar(&f.gcodeEnabled)
-	app.Flag("udp.ip-override", "Address of the exporter in the G-code. Default: the local address of the route to the printer.").Default("").StringVar(&f.gcodeHost)
-	app.Flag("udp.all-metrics", "Enable all UDP metrics in the G-code. This makes the printer slow.").Default("false").BoolVar(&f.gcodeAll)
-	app.Flag("udp.extra-metrics", "Comma-separated UDP metrics to enable in the G-code, in addition to the default metrics.").Default("").StringVar(&f.gcodeExtra)
-	app.Flag("loki.push-url", "Loki push URL for the job thumbnail, for example http://loki:3100/loki/api/v1/push. Empty disables the push.").Default("").StringVar(&f.lokiPushURL)
+	app.Flag("udp.ip-override", "Address of the exporter in the G-code. Default: the local address of the route to the printer.").PlaceHolder("ADDRESS").StringVar(&f.gcodeHost)
+	app.Flag("udp.all-metrics", "Enable all UDP metrics in the G-code. This makes the printer slow.").BoolVar(&f.gcodeAll)
+	app.Flag("udp.extra-metrics", "A UDP metric to enable in the G-code, in addition to the default metrics. Repeat the flag for more metrics.").PlaceHolder("METRIC").StringsVar(&f.gcodeExtra)
+	app.Flag("loki.push-url", "Loki push URL for the job thumbnail, for example http://loki:3100/loki/api/v1/push. Empty disables the push.").PlaceHolder("URL").StringVar(&f.lokiPushURL)
 	f.webFlags = kingpinflag.AddFlags(app, ":10009")
 	promslogflag.AddFlags(app, &f.promslogConfig)
 	app.Version(version.Print(name))
 	app.HelpFlag.Short('h')
+	app.Validate(func(*kingpin.Application) error {
+		paths := map[string]bool{f.telemetryPath: true, f.prusaLinkPath: true, f.udpPath: true}
+		if len(paths) != 3 || paths["/"] {
+			return errors.New("the telemetry, PrusaLink and UDP paths must be different, and not \"/\"")
+		}
+		return nil
+	})
 	if _, err := app.Parse(args); err != nil {
 		return nil, err
-	}
-	paths := map[string]bool{f.telemetryPath: true, f.prusaLinkPath: true, f.udpPath: true}
-	if len(paths) != 3 || paths["/"] {
-		return nil, errors.New("the telemetry, PrusaLink and UDP paths must be different, and not \"/\"")
 	}
 	return f, nil
 }
 
 func main() {
-	f, err := parseFlags(kingpin.New(name, "Prometheus exporter for Prusa printers."), os.Args[1:])
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(2)
-	}
+	app := kingpin.New(name, "Prometheus exporter for Prusa printers.")
+	f, err := parseFlags(app, os.Args[1:])
+	app.FatalIfError(err, "")
 	logger := promslog.New(&f.promslogConfig)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	err = run(ctx, f, logger)
@@ -205,7 +205,7 @@ func run(ctx context.Context, f *flags, logger *slog.Logger) error {
 				Host:          f.gcodeHost,
 				Port:          udpAddr.Port,
 				All:           f.gcodeAll,
-				Extra:         splitList(f.gcodeExtra),
+				Extra:         f.gcodeExtra,
 				Timeout:       30 * time.Second,
 				RetryInterval: time.Minute,
 			}, logger)
@@ -221,13 +221,3 @@ var httpRequests = prometheus.NewCounterVec(prometheus.CounterOpts{
 	Name: "prusa_exporter_http_requests_total",
 	Help: "Number of HTTP requests to the metrics endpoints, by handler and status code.",
 }, []string{"handler", "code"})
-
-func splitList(s string) []string {
-	var r []string
-	for v := range strings.SplitSeq(s, ",") {
-		if v = strings.TrimSpace(v); v != "" {
-			r = append(r, v)
-		}
-	}
-	return r
-}

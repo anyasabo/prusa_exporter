@@ -27,6 +27,7 @@ func TestParseFlags(t *testing.T) {
 		{"same paths", []string{"--exporter.metrics-path=/metrics"}, true},
 		{"root path", []string{"--exporter.udp-metrics-path=/"}, true},
 		{"unknown flag", []string{"--exporter.metrics-port=1"}, true},
+		{"repeated extra metrics", []string{"--udp.extra-metrics=a", "--udp.extra-metrics=b"}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -40,17 +41,6 @@ func TestParseFlags(t *testing.T) {
 				t.Errorf("parseFlags(%v) error = %v, want error %v", tt.args, err, tt.isErr)
 			}
 		})
-	}
-}
-
-func TestSplitList(t *testing.T) {
-	t.Parallel()
-	got := splitList(" a, b,,c ")
-	if strings.Join(got, "|") != "a|b|c" {
-		t.Errorf("splitList() = %q", got)
-	}
-	if splitList("") != nil {
-		t.Error("splitList(\"\") is not nil")
 	}
 }
 
