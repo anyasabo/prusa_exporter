@@ -1,0 +1,52 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - contextcheck
+    - errorlint
+    - gocritic
+    - gosec
+    - misspell
+    - nilerr
+    - noctx
+    - perfsprint
+    - promlinter
+    - revive
+    - sloglint
+    - thelper
+    - tparallel
+    - unconvert
+    - usestdlibvars
+    - usetesting
+  settings:
+    promlinter:
+      strict: true
+    sloglint:
+      attr-only: false
+      kv-only: true
+      no-global: all
+      static-msg: true
+      key-naming-case: snake
+    revive:
+      rules:
+        - name: exported
+        - name: package-comments
+        - name: unused-parameter
+          disabled: true
+  exclusions:
+    presets:
+      - std-error-handling
+    rules:
+      - path: _test\.go
+        linters: [gosec, noctx, bodyclose]
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/anyasabo/prusa_exporter

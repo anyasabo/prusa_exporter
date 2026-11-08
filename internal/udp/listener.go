@@ -1,0 +1,120 @@
+package udp
+
+import (
+	"context"
+	"errors"
+	"net"
+	"net/netip"
+	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+)
+
+// The values of the label "result" of prusa_exporter_udp_points_total.
+const (
+	resultStored     = "stored"
+	resultParseError = "parse_error"
+	resultErrorPoint = "error_point"
+	resultDropped    = "dropped"
+)
+
+// readBufferSize is the socket receive buffer. A printer sends bursts of datagrams.
+const readBufferSize = 1 << 20
+
+type selfMetrics struct {
+	packets         prometheus.Counter
+	bytes           prometheus.Counter
+	readErrors      prometheus.Counter
+	invalidMessages prometheus.Counter
+	points          *prometheus.CounterVec
+	seriesExpired   prometheus.Counter
+}
+
+func newSelfMetrics(reg prometheus.Registerer, seriesCount func() float64) *selfMetrics {
+	m := &selfMetrics{
+		packets: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "prusa_exporter_udp_packets_received_total",
+			Help: "Number of UDP datagrams received.",
+		}),
+		bytes: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "prusa_exporter_udp_received_bytes_total",
+			Help: "Number of bytes in the UDP datagrams received.",
+		}),
+		readErrors: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "prusa_exporter_udp_read_errors_total",
+			Help: "Number of errors while reading from the UDP socket.",
+		}),
+		invalidMessages: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "prusa_exporter_udp_invalid_messages_total",
+			Help: "Number of UDP datagrams without a valid syslog header.",
+		}),
+		points: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "prusa_exporter_udp_points_total",
+			Help: "Number of UDP points, by result. \"dropped\" is a point of a new series above the series limit, or with a conflicting type.",
+		}, []string{"result"}),
+		seriesExpired: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "prusa_exporter_udp_series_expired_total",
+			Help: "Number of UDP series deleted because they had no point in the TTL.",
+		}),
+	}
+	for _, r := range []string{resultStored, resultParseError, resultErrorPoint, resultDropped} {
+		m.points.WithLabelValues(r)
+	}
+	reg.MustRegister(m.packets, m.bytes, m.readErrors, m.invalidMessages, m.points, m.seriesExpired,
+		prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+			Name: "prusa_exporter_udp_series",
+			Help: "Number of UDP series in memory.",
+		}, seriesCount))
+	return m
+}
+
+// Handle processes one datagram from the address from.
+func (c *Collector) Handle(data []byte, from netip.AddrPort, received time.Time) {
+	c.metrics.packets.Inc()
+	c.metrics.bytes.Add(float64(len(data)))
+
+	msg, err := parseMessage(string(data))
+	if err != nil {
+		c.metrics.invalidMessages.Inc()
+		c.logger.Debug("Invalid UDP message", "from", from, "err", err)
+		return
+	}
+	points := make([]*point, 0, len(msg.Points))
+	for _, line := range msg.Points {
+		p, err := parsePoint(line)
+		if err != nil {
+			// The firmware can send a raw value that is not a point, for example from tmc_read.
+			c.metrics.points.WithLabelValues(resultParseError).Inc()
+			c.logger.Debug("Cannot parse a UDP point", "line", line, "err", err)
+			continue
+		}
+		points = append(points, p)
+	}
+	setSampleTimes(points, received)
+	stored, dropped := c.record(msg.Hostname, from.Addr().Unmap().String(), points, received)
+	c.metrics.points.WithLabelValues(resultStored).Add(float64(stored))
+	c.metrics.points.WithLabelValues(resultDropped).Add(float64(dropped))
+}
+
+// Serve reads datagrams from conn until ctx ends, and gives them to c. It closes conn.
+func (c *Collector) Serve(ctx context.Context, conn *net.UDPConn) error {
+	if err := conn.SetReadBuffer(readBufferSize); err != nil {
+		c.logger.Warn("Cannot set the UDP receive buffer", "err", err)
+	}
+	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer stop()
+
+	buf := make([]byte, 64<<10)
+	for {
+		n, from, err := conn.ReadFromUDPAddrPort(buf)
+		if err != nil {
+			if ctx.Err() != nil || errors.Is(err, net.ErrClosed) {
+				return nil
+			}
+			c.metrics.readErrors.Inc()
+			c.logger.Warn("Cannot read from the UDP socket", "err", err)
+			continue
+		}
+		c.Handle(buf[:n], from, time.Now())
+	}
+}
