@@ -1,197 +1,193 @@
 package udp
 
 import (
+	"fmt"
+	"sort"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 )
 
-func TestInit(t *testing.T) {
-	// Create a new test registry
-	testRegistry := prometheus.NewRegistry()
-
-	// Call Init
-	Init(testRegistry)
-
-	// Verify udpRegistry is set
-	if udpRegistry == nil {
-		t.Error("Init() did not set udpRegistry")
+// gatherSamples returns each series of reg as "name{k=v,...}" with its value.
+// It fails the test if the registry cannot gather.
+func gatherSamples(t *testing.T, reg *prometheus.Registry) map[string]float64 {
+	t.Helper()
+	families, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("Gather() error: %v", err)
 	}
+	samples := make(map[string]float64)
+	for _, mf := range families {
+		for _, m := range mf.GetMetric() {
+			samples[sampleKey(mf.GetName(), m)] = sampleValue(mf.GetType(), m)
+		}
+	}
+	return samples
+}
 
-	if udpRegistry != testRegistry {
+// gatherTypes returns the type of each metric family of reg.
+func gatherTypes(t *testing.T, reg *prometheus.Registry) map[string]dto.MetricType {
+	t.Helper()
+	families, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("Gather() error: %v", err)
+	}
+	types := make(map[string]dto.MetricType)
+	for _, mf := range families {
+		types[mf.GetName()] = mf.GetType()
+	}
+	return types
+}
+
+func sampleKey(name string, m *dto.Metric) string {
+	pairs := make([]string, 0, len(m.GetLabel()))
+	for _, l := range m.GetLabel() {
+		pairs = append(pairs, l.GetName()+"="+l.GetValue())
+	}
+	sort.Strings(pairs)
+	return name + "{" + strings.Join(pairs, ",") + "}"
+}
+
+func sampleValue(typ dto.MetricType, m *dto.Metric) float64 {
+	switch typ {
+	case dto.MetricType_COUNTER:
+		return m.GetCounter().GetValue()
+	case dto.MetricType_GAUGE:
+		return m.GetGauge().GetValue()
+	default:
+		return m.GetUntyped().GetValue()
+	}
+}
+
+// newTestRegistry calls Init with a new registry and returns the registry.
+func newTestRegistry(t *testing.T) *prometheus.Registry {
+	t.Helper()
+	reg := prometheus.NewRegistry()
+	Init(reg)
+	return reg
+}
+
+func mustParse(t *testing.T, line string) point {
+	t.Helper()
+	p, err := parseLineProtocol(line)
+	if err != nil {
+		t.Fatalf("parseLineProtocol(%q) error: %v", line, err)
+	}
+	return *p
+}
+
+func TestInit(t *testing.T) {
+	reg := newTestRegistry(t)
+
+	if udpRegistry != reg {
 		t.Error("Init() did not set udpRegistry to provided registry")
 	}
-
-	// Verify lastPush metric is registered
-	if registryMetrics.metrics == nil {
-		t.Error("Init() did not initialize registryMetrics.metrics")
+	if collector == nil {
+		t.Fatal("Init() did not make the collector")
 	}
 
-	if registryMetrics.labels == nil {
-		t.Error("Init() did not initialize registryMetrics.labels")
-	}
-
-	if _, exists := registryMetrics.metrics["last_push"]; !exists {
-		t.Error("Init() did not register last_push metric")
-	}
-
-	// Test that we can gather metrics from the registry
-	metricFamilies, err := testRegistry.Gather()
-	if err != nil {
-		t.Errorf("Init() registry.Gather() error: %v", err)
-	}
-
-	// We may not have metrics immediately, so let's just check that gathering works
-	// and we have the registry initialized properly
-	if metricFamilies == nil {
-		t.Error("Init() registry.Gather() should not return nil")
-	}
-
-	// The metric will appear only after it's actually used/set
-	// For now, just verify the registry is functional
-	t.Logf("Init() registry initialized with %d metric families", len(metricFamilies))
-}
-
-func TestRegisterMetric(t *testing.T) {
-	// Initialize with a test registry
-	testRegistry := prometheus.NewRegistry()
-	Init(testRegistry)
-
-	tests := []struct {
-		name  string
-		point point
-	}{
-		{
-			name: "Simple metric",
-			point: point{
-				Measurement: "temperature",
-				Tags:        map[string]string{"sensor": "nozzle", "printer_mac": "ABC123"},
-				Fields:      map[string]interface{}{"value": 220.5},
-			},
-		},
-		{
-			name: "Metric with v field",
-			point: point{
-				Measurement: "temp_bed",
-				Tags:        map[string]string{"printer_mac": "ABC123", "printer_address": "192.168.1.100"},
-				Fields:      map[string]interface{}{"v": 60.0},
-			},
-		},
-		{
-			name: "Metric with multiple fields",
-			point: point{
-				Measurement: "fan",
-				Tags:        map[string]string{"type": "print", "printer_mac": "ABC123"},
-				Fields:      map[string]interface{}{"rpm": int64(1500), "pwm": int64(80)},
-			},
-		},
-		{
-			name: "Metric with boolean field",
-			point: point{
-				Measurement: "door_sensor",
-				Tags:        map[string]string{"printer_mac": "ABC123"},
-				Fields:      map[string]interface{}{"open": true},
-			},
-		},
-		{
-			name: "Metric with string field",
-			point: point{
-				Measurement: "filament",
-				Tags:        map[string]string{"printer_mac": "ABC123"},
-				Fields:      map[string]interface{}{"material": "PLA"},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Register the metric
-			registerMetric(tt.point)
-
-			// Check that metrics were created
-			registryMetrics.mu.Lock()
-			defer registryMetrics.mu.Unlock()
-
-			for fieldName := range tt.point.Fields {
-				metricName := tt.point.Measurement
-				if fieldName != "v" && fieldName != "value" {
-					metricName = metricName + "_" + fieldName
-				}
-
-				if _, exists := registryMetrics.metrics[metricName]; !exists {
-					t.Errorf("registerMetric() did not create metric %s", metricName)
-				}
-
-				if _, exists := registryMetrics.labels[metricName]; !exists {
-					t.Errorf("registerMetric() did not store labels for metric %s", metricName)
-				}
-			}
-		})
-	}
-
-	// Test that metrics can be gathered from registry
-	metricFamilies, err := testRegistry.Gather()
-	if err != nil {
-		t.Errorf("registerMetric() registry.Gather() error: %v", err)
-	}
-
-	if len(metricFamilies) == 0 {
-		t.Error("registerMetric() should create gatherable metrics")
+	lastPush.WithLabelValues("ABC123", "192.168.1.100").Set(1)
+	samples := gatherSamples(t, reg)
+	if _, ok := samples["prusa_last_push_timestamp{printer_address=192.168.1.100,printer_mac=ABC123}"]; !ok {
+		t.Errorf("Init() did not register prusa_last_push_timestamp, got %v", samples)
 	}
 }
 
-func TestGetLabels(t *testing.T) {
-	tests := []struct {
-		name     string
-		tags     map[string]string
-		expected int // expected number of labels
-	}{
-		{
-			name:     "Empty tags",
-			tags:     map[string]string{},
-			expected: 0,
-		},
-		{
-			name:     "Single tag",
-			tags:     map[string]string{"printer_mac": "ABC123"},
-			expected: 1,
-		},
-		{
-			name: "Multiple tags",
-			tags: map[string]string{
-				"printer_mac":     "ABC123",
-				"printer_address": "192.168.1.100",
-				"sensor":          "nozzle",
-			},
-			expected: 3,
-		},
+func TestRecordPointGauges(t *testing.T) {
+	reg := newTestRegistry(t)
+	now := time.Now()
+
+	lines := []string{
+		"prusa_temp_bed,printer_mac=ABC123 v=60.5 0",
+		"prusa_temperature,printer_mac=ABC123,sensor=nozzle value=220.5 0",
+		"prusa_xbe_fan,printer_mac=ABC123,fan=1 rpm=1500i,pwm=80i 0",
+		"prusa_cnt,printer_mac=ABC123 c=1 0",
+	}
+	for _, line := range lines {
+		p := mustParse(t, line)
+		collector.recordPoint(p, strings.TrimPrefix(p.Measurement, "prusa_"), now)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := getLabels(tt.tags)
+	want := map[string]float64{
+		"prusa_temp_bed{printer_mac=ABC123}":                  60.5,
+		"prusa_temperature{printer_mac=ABC123,sensor=nozzle}": 220.5,
+		"prusa_xbe_fan_rpm{fan=1,printer_mac=ABC123}":         1500,
+		"prusa_xbe_fan_pwm{fan=1,printer_mac=ABC123}":         80,
+		"prusa_cnt_c{printer_mac=ABC123}":                     1,
+	}
+	samples := gatherSamples(t, reg)
+	for k, v := range want {
+		got, ok := samples[k]
+		if !ok {
+			t.Errorf("series %s is missing, got %v", k, samples)
+			continue
+		}
+		if got != v {
+			t.Errorf("series %s = %v, want %v", k, got, v)
+		}
+	}
 
-			if len(result) != tt.expected {
-				t.Errorf("getLabels() returned %d labels, expected %d", len(result), tt.expected)
-			}
+	types := gatherTypes(t, reg)
+	if types["prusa_temp_bed"] != dto.MetricType_GAUGE {
+		t.Errorf("prusa_temp_bed type = %v, want GAUGE", types["prusa_temp_bed"])
+	}
+}
 
-			// Check that all tag keys are present in result
-			tagKeys := make(map[string]bool)
-			for key := range tt.tags {
-				tagKeys[key] = true
-			}
+// The firmware sends some metrics with different tag sets. Each tag set must keep
+// its own labels.
+func TestRecordPointVaryingTags(t *testing.T) {
+	reg := newTestRegistry(t)
+	now := time.Now()
 
-			for _, label := range result {
-				if !tagKeys[label] {
-					t.Errorf("getLabels() returned unexpected label: %s", label)
-				}
-				delete(tagKeys, label)
-			}
+	lines := []string{
+		`prusa_phxy_home,printer_mac=ABC123,t="s" h=1i 0`,
+		`prusa_phxy_home,printer_mac=ABC123,t="v",a=2 h=2i 0`,
+		`prusa_phxy_home,printer_mac=ABC123 h=3i 0`,
+	}
+	for _, line := range lines {
+		p := mustParse(t, line)
+		collector.recordPoint(p, "phxy_home", now)
+	}
 
-			if len(tagKeys) > 0 {
-				t.Errorf("getLabels() missing labels: %v", tagKeys)
+	want := map[string]float64{
+		"prusa_phxy_home_h{printer_mac=ABC123,t=s}":     1,
+		"prusa_phxy_home_h{a=2,printer_mac=ABC123,t=v}": 2,
+		"prusa_phxy_home_h{printer_mac=ABC123}":         3,
+	}
+	samples := gatherSamples(t, reg)
+	for k, v := range want {
+		if got, ok := samples[k]; !ok || got != v {
+			t.Errorf("series %s = %v (present %v), want %v. All: %v", k, got, ok, v, samples)
+		}
+	}
+}
+
+func TestConcurrentRecordPoint(t *testing.T) {
+	reg := newTestRegistry(t)
+
+	done := make(chan bool, 10)
+	for i := 0; i < 10; i++ {
+		go func(id int) {
+			defer func() { done <- true }()
+			p := point{
+				Measurement: "concurrent_test",
+				Tags:        map[string]string{"printer_mac": "ABC123", "id": fmt.Sprint(id)},
+				Fields:      map[string]interface{}{"value": float64(id)},
 			}
-		})
+			collector.recordPoint(p, "concurrent_test", time.Now())
+			_, _ = reg.Gather()
+		}(i)
+	}
+	for i := 0; i < 10; i++ {
+		<-done
+	}
+
+	samples := gatherSamples(t, reg)
+	if len(samples) != 10 {
+		t.Errorf("got %d series, want 10: %v", len(samples), samples)
 	}
 }
 
@@ -232,72 +228,18 @@ func TestToFloat64(t *testing.T) {
 	}
 }
 
-func TestConcurrentMetricRegistration(t *testing.T) {
-	// Test concurrent access to registryMetrics
-	testRegistry := prometheus.NewRegistry()
-	Init(testRegistry)
+func BenchmarkRecordPoint(b *testing.B) {
+	Init(prometheus.NewRegistry())
 
-	// Create multiple goroutines that register metrics simultaneously
-	done := make(chan bool, 10)
-
-	for i := 0; i < 10; i++ {
-		go func(id int) {
-			defer func() { done <- true }()
-
-			point := point{
-				Measurement: "concurrent_test",
-				Tags:        map[string]string{"printer_mac": "ABC123", "id": string(rune('A' + id))},
-				Fields:      map[string]interface{}{"value": float64(id)},
-			}
-
-			registerMetric(point)
-		}(i)
-	}
-
-	// Wait for all goroutines to complete
-	for i := 0; i < 10; i++ {
-		<-done
-	}
-
-	// Verify that the metric was created and no race conditions occurred
-	registryMetrics.mu.Lock()
-	defer registryMetrics.mu.Unlock()
-
-	if _, exists := registryMetrics.metrics["concurrent_test"]; !exists {
-		t.Error("Concurrent metric registration failed to create metric")
-	}
-}
-
-func BenchmarkRegisterMetric(b *testing.B) {
-	testRegistry := prometheus.NewRegistry()
-	Init(testRegistry)
-
-	point := point{
+	p := point{
 		Measurement: "benchmark_metric",
 		Tags:        map[string]string{"printer_mac": "ABC123", "printer_address": "192.168.1.100"},
 		Fields:      map[string]interface{}{"value": 220.5, "target": 225.0},
 	}
+	now := time.Now()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		registerMetric(point)
-	}
-}
-
-func BenchmarkToFloat64(b *testing.B) {
-	testValues := []interface{}{
-		42,
-		int64(123),
-		3.14,
-		true,
-		"PLA",
-		nil,
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		for _, val := range testValues {
-			_ = toFloat64(val)
-		}
+		collector.recordPoint(p, "benchmark_metric", now)
 	}
 }

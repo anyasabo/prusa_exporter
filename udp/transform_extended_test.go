@@ -97,6 +97,33 @@ func TestParseLineProtocol(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name:  "Quoted tag value",
+			input: `phxy_home,printer_mac=ABC123,t="h" h=1i 0`,
+			expected: &point{
+				Measurement: "phxy_home",
+				Tags:        map[string]string{"printer_mac": "ABC123", "t": "h"},
+				Fields:      map[string]interface{}{"h": int64(1)},
+			},
+		},
+		{
+			name:  "Escaped quote in string field",
+			input: `print_filename v="a \"b\" c" 0`,
+			expected: &point{
+				Measurement: "print_filename",
+				Tags:        map[string]string{},
+				Fields:      map[string]interface{}{"v": `a "b" c`},
+			},
+		},
+		{
+			name:  "One and zero are numbers, not booleans",
+			input: "phxy_orig,a=1 c=1,p=0 0",
+			expected: &point{
+				Measurement: "phxy_orig",
+				Tags:        map[string]string{"a": "1"},
+				Fields:      map[string]interface{}{"c": 1.0, "p": 0.0},
+			},
+		},
+		{
 			name:        "Invalid format - no fields",
 			input:       "temperature,sensor=nozzle",
 			expected:    nil,
@@ -155,6 +182,22 @@ func TestParseLineProtocol(t *testing.T) {
 				t.Errorf("parseLineProtocol() Fields = %v, expected %v", result.Fields, tt.expected.Fields)
 			}
 		})
+	}
+}
+
+func TestUnquote(t *testing.T) {
+	tests := []struct{ in, want string }{
+		{`"h"`, "h"},
+		{`h`, "h"},
+		{`""`, ""},
+		{`"`, `"`},
+		{`"a\\b"`, `a\b`},
+		{`"a\"b"`, `a"b`},
+	}
+	for _, tt := range tests {
+		if got := unquote(tt.in); got != tt.want {
+			t.Errorf("unquote(%q) = %q, want %q", tt.in, got, tt.want)
+		}
 	}
 }
 

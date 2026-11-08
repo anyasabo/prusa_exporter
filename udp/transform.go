@@ -22,7 +22,8 @@ func process(data format.LogParts, prefix string) {
 		log.Error().Msg(fmt.Sprintf("Error processing identifiers: %v", err))
 		return
 	}
-	lastPush.WithLabelValues(mac, strings.Split(ip, ":")[0]).Set(float64(time.Now().Unix())) // Set the last push timestamp
+	received := time.Now()
+	lastPush.WithLabelValues(mac, strings.Split(ip, ":")[0]).Set(float64(received.Unix())) // Set the last push timestamp
 
 	log.Debug().Msg(fmt.Sprintf("Processing data for printer %s", mac))
 	metrics, err := processMessage(data["message"].(string), mac, prefix, ip)
@@ -38,8 +39,7 @@ func process(data format.LogParts, prefix string) {
 			continue
 		}
 
-		registerMetric(*point) // Register the metric with the udp registry
-
+		collector.recordPoint(*point, strings.TrimPrefix(point.Measurement, prefix), received)
 	}
 }
 
@@ -128,7 +128,7 @@ func parseLineProtocol(line string) (*point, error) {
 		if len(tagParts) != 2 {
 			return nil, fmt.Errorf("invalid tag format: %s", tag)
 		}
-		p.Tags[tagParts[0]] = tagParts[1]
+		p.Tags[tagParts[0]] = unquote(tagParts[1])
 	}
 
 	fieldStr := parts[1]
@@ -150,18 +150,19 @@ func parseLineProtocol(line string) (*point, error) {
 			}
 		}
 
-		if bVal, err := strconv.ParseBool(val); err == nil { // boolean
-			p.Fields[key] = bVal
-			continue
-		}
-
 		if fVal, err := strconv.ParseFloat(val, 64); err == nil { // float
 			p.Fields[key] = fVal
 			continue
 		}
 
-		if strings.HasPrefix(val, "\"") && strings.HasSuffix(val, "\"") { // string
-			p.Fields[key] = val[1 : len(val)-1]
+		// After the float check, so that "1" and "0" stay numbers.
+		if bVal, err := strconv.ParseBool(val); err == nil { // boolean
+			p.Fields[key] = bVal
+			continue
+		}
+
+		if len(val) >= 2 && strings.HasPrefix(val, "\"") && strings.HasSuffix(val, "\"") { // string
+			p.Fields[key] = unquote(val)
 			continue
 		}
 
@@ -170,6 +171,28 @@ func parseLineProtocol(line string) (*point, error) {
 	}
 
 	return p, nil
+}
+
+// unquote removes the double quotes around s and the backslash escapes in it.
+// The firmware puts quotes around string values and some tag values, and it escapes
+// '"' and '\\' with a backslash. If s has no quotes around it, unquote returns s.
+func unquote(s string) string {
+	if len(s) < 2 || s[0] != '"' || s[len(s)-1] != '"' {
+		return s
+	}
+	s = s[1 : len(s)-1]
+	if !strings.Contains(s, "\\") {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' && i+1 < len(s) {
+			i++
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
 }
 
 func splitLine(s string) []string {

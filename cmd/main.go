@@ -71,6 +71,9 @@ func Run() {
 	} else {
 		log.Warn().Msg("Not enabling UDP metrics, because gcode generation is disabled")
 	}
+	// Init must run before the listener, because the listener writes to the UDP registry.
+	udp.Init(udpRegistry)
+
 	// starting syslog server
 
 	log.Info().Msg("Syslog server starting at: " + *syslogListenAddress)
@@ -83,8 +86,6 @@ func Run() {
 	log.Info().Msg("Metrics registered")
 	http.Handle(*metricsPath, promhttp.Handler())
 	log.Info().Msg("PrusaLink metrics initialized")
-
-	udp.Init(udpRegistry)
 
 	http.Handle(*udpMetricsPath, promhttp.HandlerFor(udpRegistry, promhttp.HandlerOpts{
 		Registry: udpRegistry,
