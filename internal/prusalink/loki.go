@@ -137,7 +137,7 @@ func (p *LokiPusher) send(ctx context.Context, c *Client, jobName, jobPath, imag
 	if err != nil {
 		return err
 	}
-	defer res.Body.Close()                                       //nolint:errcheck // Nothing to do on a close error.
+	defer res.Body.Close()
 	_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, 64<<10)) // Read the body, so the connection can be used again.
 	if res.StatusCode < 200 || res.StatusCode > 299 {
 		return fmt.Errorf("loki: %s", res.Status)

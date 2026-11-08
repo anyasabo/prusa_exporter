@@ -11,6 +11,7 @@ linters:
     - misspell
     - nilerr
     - noctx
+    - nolintlint
     - perfsprint
     - promlinter
     - revive
@@ -24,23 +25,13 @@ linters:
     promlinter:
       strict: true
     sloglint:
-      attr-only: false
       kv-only: true
       no-global: all
       static-msg: true
       key-naming-case: snake
-    revive:
-      rules:
-        - name: exported
-        - name: package-comments
-        - name: unused-parameter
-          disabled: true
   exclusions:
     presets:
       - std-error-handling
-    rules:
-      - path: _test\.go
-        linters: [gosec, noctx, bodyclose]
 
 formatters:
   enable:

@@ -234,7 +234,7 @@ func TestDigestChallengeIsReused(t *testing.T) {
 func TestHandlerScrapeTimeout(t *testing.T) {
 	t.Parallel()
 	block := make(chan struct{})
-	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	slow := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		select {
 		case <-block:
 		case <-r.Context().Done():

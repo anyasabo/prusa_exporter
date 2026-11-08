@@ -135,7 +135,7 @@ func (c *Client) Do(ctx context.Context, method, endpoint, path string, body io.
 	if err != nil {
 		return nil, err
 	}
-	defer res.Body.Close() //nolint:errcheck // A close error of a read body is not useful.
+	defer res.Body.Close()
 
 	data, err := io.ReadAll(io.LimitReader(res.Body, maxBodySize))
 	if err != nil {

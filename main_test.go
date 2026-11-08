@@ -58,14 +58,14 @@ func freePort(t *testing.T, network string) string {
 	t.Helper()
 	switch network {
 	case "udp":
-		c, err := net.ListenPacket("udp", "127.0.0.1:0")
+		c, err := (&net.ListenConfig{}).ListenPacket(t.Context(), "udp", "127.0.0.1:0")
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer c.Close()
 		return c.LocalAddr().String()
 	default:
-		l, err := net.Listen("tcp", "127.0.0.1:0")
+		l, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -137,7 +137,7 @@ func TestRun(t *testing.T) {
 	for {
 		req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, base+"/", nil)
 		if res, err := http.DefaultClient.Do(req); err == nil {
-			res.Body.Close()
+			_ = res.Body.Close()
 			break
 		}
 		if time.Now().After(deadline) {
@@ -146,7 +146,7 @@ func TestRun(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 
-	conn, err := net.Dial("udp", udpAddr)
+	conn, err := (&net.Dialer{}).DialContext(t.Context(), "udp", udpAddr)
 	if err != nil {
 		t.Fatal(err)
 	}

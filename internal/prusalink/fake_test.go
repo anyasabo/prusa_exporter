@@ -2,13 +2,12 @@ package prusalink
 
 import (
 	"crypto/md5" //nolint:gosec // HTTP digest uses MD5.
+	"embed"
 	"encoding/hex"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -25,6 +24,9 @@ const (
 	testRealm  = "Printer API"
 	testNonce  = "dcd98b7102dd2f0e8b11d0f600bfb0c093"
 )
+
+//go:embed testdata/*.json
+var testdata embed.FS
 
 // fakePrusaLink is a PrusaLink server for tests. It checks the digest or the API key.
 type fakePrusaLink struct {
@@ -161,7 +163,7 @@ func (f *fakePrusaLink) serve(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	data, err := os.ReadFile(filepath.Join("testdata", name))
+	data, err := testdata.ReadFile("testdata/" + name)
 	if err != nil {
 		f.t.Errorf("fixture: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)

@@ -71,7 +71,7 @@ func localAddress(ctx context.Context, printerAddress string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer conn.Close() //nolint:errcheck // No packet was sent.
+	defer conn.Close()
 	addr, ok := conn.LocalAddr().(*net.UDPAddr)
 	if !ok {
 		return "", errors.New("no UDP address")
