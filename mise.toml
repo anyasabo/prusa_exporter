@@ -11,6 +11,8 @@ syft = "1.57.0"
 actionlint = "1.7.12"
 zizmor = "1.32.0"
 "go:golang.org/x/vuln/cmd/govulncheck" = "1.9.0"
+# promtool checks and tests the alert rules.
+"aqua:prometheus/prometheus" = "3.16.0"
 
 [tasks.fmt]
 description = "Format the Go code"
@@ -24,7 +26,12 @@ run = [
   "goreleaser check --quiet",
   "actionlint",
   "zizmor --quiet .github",
+  "promtool check rules alerts/prusa_exporter.rules.yml",
 ]
+
+[tasks.test-alerts]
+description = "Run the unit tests of the alert rules"
+run = "promtool test rules alerts/prusa_exporter.test.yml"
 
 [tasks.vulncheck]
 description = "Check the dependencies for known vulnerabilities"
@@ -44,7 +51,7 @@ done
 
 [tasks.ci]
 description = "Run all checks of CI"
-depends = ["lint", "test", "vulncheck"]
+depends = ["lint", "test", "test-alerts", "vulncheck"]
 
 [tasks.build]
 description = "Build the binary for this platform into dist/"

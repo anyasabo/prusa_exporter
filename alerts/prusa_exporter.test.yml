@@ -1,0 +1,132 @@
+rule_files:
+  - prusa_exporter.rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  - name: attention
+    interval: 1m
+    input_series:
+      - series: 'prusa_printer_state{printer_name="P",printer_address="10.0.0.2",printer_state="ATTENTION"}'
+        values: "0 1 1 1"
+      - series: 'prusa_printer_state{printer_name="P",printer_address="10.0.0.2",printer_state="PRINTING"}'
+        values: "1 0 0 0"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: PrusaPrinterNeedsAttention
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: PrusaPrinterNeedsAttention
+        exp_alerts:
+          - exp_labels: { severity: warning, printer_name: P, printer_address: 10.0.0.2, printer_state: ATTENTION }
+            exp_annotations:
+              summary: "P is in the state ATTENTION"
+              description: "The printer waits for a person. Look at its display."
+
+  # The printer sends UDP data, but PrusaLink fails. Then the printer is off: no alert.
+  - name: prusalink failing
+    interval: 1m
+    input_series:
+      - series: 'prusa_up{printer_name="P",printer_address="10.0.0.2"}'
+        values: "0x40"
+      # The push time follows the clock for 20 minutes, then stops.
+      - series: 'prusa_last_push_timestamp_seconds{printer_mac="AA",printer_address="10.0.0.2"}'
+        values: "0+60x20 1200x20"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: PrusaLinkScrapeFailing
+        exp_alerts:
+          - exp_labels: { severity: warning, printer_name: P, printer_address: 10.0.0.2 }
+            exp_annotations:
+              summary: "PrusaLink of P does not answer, but the printer is on"
+              description: "Look at the exporter log (error.message) and at the PrusaLink settings and API key of the printer."
+      - eval_time: 35m
+        alertname: PrusaLinkScrapeFailing
+        exp_alerts: []
+
+  # PrusaLink answers, and UDP data stops at 10 minutes. A printer that never sent UDP
+  # data also gets the alert.
+  - name: udp stopped
+    interval: 1m
+    input_series:
+      - series: 'prusa_up{printer_name="P",printer_address="10.0.0.2"}'
+        values: "1x30"
+      - series: 'prusa_up{printer_name="Q",printer_address="10.0.0.3"}'
+        values: "1x30"
+      - series: 'prusa_last_push_timestamp_seconds{printer_mac="AA",printer_address="10.0.0.2"}'
+        values: "0+60x10 600x20"
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: PrusaUDPMetricsStopped
+        exp_alerts:
+          - exp_labels: { severity: warning, printer_name: Q, printer_address: 10.0.0.3 }
+            exp_annotations:
+              summary: "Q sends no UDP metrics"
+              description: "Look at Settings > Network > Metrics & Log on the printer: the host and port must be the exporter."
+      - eval_time: 25m
+        alertname: PrusaUDPMetricsStopped
+        exp_alerts:
+          - exp_labels: { severity: warning, printer_name: P, printer_address: 10.0.0.2 }
+            exp_annotations:
+              summary: "P sends no UDP metrics"
+              description: "Look at Settings > Network > Metrics & Log on the printer: the host and port must be the exporter."
+          - exp_labels: { severity: warning, printer_name: Q, printer_address: 10.0.0.3 }
+            exp_annotations:
+              summary: "Q sends no UDP metrics"
+              description: "Look at Settings > Network > Metrics & Log on the printer: the host and port must be the exporter."
+
+  - name: slow scrape
+    interval: 1m
+    input_series:
+      - series: 'prusa_scrape_duration_seconds{printer_name="P",printer_address="10.0.0.2"}'
+        values: "7x20"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PrusaLinkScrapeSlow
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: PrusaLinkScrapeSlow
+        exp_alerts:
+          - exp_labels: { severity: info, printer_name: P, printer_address: 10.0.0.2 }
+            exp_annotations:
+              summary: "The PrusaLink scrape of P takes 7s"
+              description: "The default budget is 8 s. If a scrape takes longer, prusa_up is 0. Look at the network to the printer."
+
+  - name: exporter counters
+    interval: 1m
+    input_series:
+      - series: 'prusa_exporter_udp_points_total{result="dropped"}'
+        values: "0 0 5 5"
+      - series: 'prusa_exporter_udp_read_errors_total'
+        values: "0 0 0 0"
+      - series: 'prusa_exporter_udp_invalid_messages_total'
+        values: "0 0 3 20"
+      - series: 'prusa_exporter_prusalink_handler_errors_total'
+        values: "0 0 0 1"
+      - series: 'prusa_exporter_loki_pushes_total{result="push_error"}'
+        values: "0 0 0 0"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: PrusaExporterUDPPointsDropped
+        exp_alerts:
+          - exp_labels: { severity: warning, result: dropped }
+            exp_annotations:
+              summary: "The exporter drops UDP points"
+              description: "The series limit (udp_max_series) is reached, or a metric changed its type. Look at the warnings in the exporter log."
+      - eval_time: 3m
+        alertname: PrusaExporterUDPReceiveErrors
+        exp_alerts:
+          - exp_labels: { severity: info }
+            exp_annotations:
+              summary: "The UDP receiver has errors"
+              description: "Read errors, or datagrams that are not from a printer. Look at the debug log of the exporter."
+      - eval_time: 3m
+        alertname: PrusaExporterHandlerErrors
+        exp_alerts:
+          - exp_labels: { severity: warning }
+            exp_annotations:
+              summary: "The exporter cannot serve its metrics"
+              description: "Look at the error log of the exporter."
+      - eval_time: 3m
+        alertname: PrusaExporterLokiPushFailing
+        exp_alerts: []

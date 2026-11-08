@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -160,4 +161,25 @@ func labelList(mf *dto.MetricFamily) string {
 		names[i] = "`" + n + "`"
 	}
 	return strings.Join(names, ", ")
+}
+
+// TestAlertRuleMetrics makes sure that the alert rules use only metrics of the reference.
+func TestAlertRuleMetrics(t *testing.T) {
+	t.Parallel()
+	rules, err := os.ReadFile("alerts/prusa_exporter.rules.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, err := os.ReadFile(metricsDoc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range regexp.MustCompile(`\bprusa_[a-z_]+\b`).FindAllString(string(rules), -1) {
+		if name == "prusa_exporter" || name == "prusa_printer" { // the group names
+			continue
+		}
+		if !strings.Contains(string(doc), "`"+name+"`") {
+			t.Errorf("the alert rules use %s, which is not in %s", name, metricsDoc)
+		}
+	}
 }

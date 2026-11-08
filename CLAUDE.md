@@ -94,6 +94,9 @@ There is no global state and no default registry.
   them. `TestMetricsReference` generates `docs/metrics.md` from the real output. If the output
   changes, the test fails. To write it again: `mise exec -- go test -run TestMetricsReference . -args -update`
   Then update "Changes from 2.0.0" in the README and the dashboards.
+- `alerts/prusa_exporter.rules.yml` has unit tests in `alerts/prusa_exporter.test.yml`
+  (`mise run test-alerts`). If a rule uses a metric that is not in `docs/metrics.md`,
+  `TestAlertRuleMetrics` fails.
 - `prusa.yml` is strict: an unknown key is an error. `exporter.scrape_timeout` and
   `exporter.log_level` are accepted and ignored, because old files have them.
   `docs/config/prusa.yml` must stay valid (`TestSampleConfig`).

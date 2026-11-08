@@ -1,0 +1,88 @@
+# Alert rules for prusa_exporter. They use only the metrics of the exporter, so they
+# work with any job names. Test: mise run test-alerts
+groups:
+  - name: prusa_printer
+    rules:
+      - alert: PrusaPrinterNeedsAttention
+        expr: prusa_printer_state{printer_state=~"ATTENTION|ERROR"} == 1
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.printer_name }} is in the state {{ $labels.printer_state }}"
+          description: "The printer waits for a person. Look at its display."
+
+      # The printer is on (it sends UDP metrics), but PrusaLink does not answer.
+      - alert: PrusaLinkScrapeFailing
+        expr: |
+          prusa_up == 0
+            and on (printer_address)
+          (time() - prusa_last_push_timestamp_seconds < 120)
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PrusaLink of {{ $labels.printer_name }} does not answer, but the printer is on"
+          description: "Look at the exporter log (error.message) and at the PrusaLink settings and API key of the printer."
+
+      # PrusaLink answers, but the UDP metrics do not arrive.
+      - alert: PrusaUDPMetricsStopped
+        expr: |
+          prusa_up == 1
+            unless on (printer_address)
+          (time() - prusa_last_push_timestamp_seconds < 300)
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.printer_name }} sends no UDP metrics"
+          description: "Look at Settings > Network > Metrics & Log on the printer: the host and port must be the exporter."
+
+      - alert: PrusaLinkScrapeSlow
+        expr: prusa_scrape_duration_seconds > 6
+        for: 15m
+        labels:
+          severity: info
+        annotations:
+          summary: "The PrusaLink scrape of {{ $labels.printer_name }} takes {{ $value | humanizeDuration }}"
+          description: "The default budget is 8 s. If a scrape takes longer, prusa_up is 0. Look at the network to the printer."
+
+  - name: prusa_exporter
+    rules:
+      - alert: PrusaExporterUDPPointsDropped
+        expr: increase(prusa_exporter_udp_points_total{result="dropped"}[15m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "The exporter drops UDP points"
+          description: "The series limit (udp_max_series) is reached, or a metric changed its type. Look at the warnings in the exporter log."
+
+      - alert: PrusaExporterUDPReceiveErrors
+        expr: |
+          increase(prusa_exporter_udp_read_errors_total[15m]) > 0
+            or
+          increase(prusa_exporter_udp_invalid_messages_total[15m]) > 10
+        labels:
+          severity: info
+        annotations:
+          summary: "The UDP receiver has errors"
+          description: "Read errors, or datagrams that are not from a printer. Look at the debug log of the exporter."
+
+      - alert: PrusaExporterHandlerErrors
+        expr: |
+          increase(prusa_exporter_prusalink_handler_errors_total[15m]) > 0
+            or
+          increase(promhttp_metric_handler_errors_total[15m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "The exporter cannot serve its metrics"
+          description: "Look at the error log of the exporter."
+
+      - alert: PrusaExporterLokiPushFailing
+        expr: increase(prusa_exporter_loki_pushes_total{result="push_error"}[30m]) > 0
+        labels:
+          severity: info
+        annotations:
+          summary: "The exporter cannot push the job thumbnail to Loki"
+          description: "Look at --loki.push-url and at Loki."

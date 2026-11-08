@@ -103,6 +103,10 @@ I've prepared quick guide where you can learn how to get credentials and IP addr
 
 `/metrics` has the metrics of the exporter itself: the build info, the Go and process metrics, the duration of each PrusaLink request and of each scrape, and counters for the UDP receiver. [docs/metrics.md](docs/metrics.md) lists them. Scrape `/metrics` as a third job, next to `/metrics/prusalink` and `/metrics/udp`.
 
+## Alert rules
+
+[alerts/prusa_exporter.rules.yml](alerts/prusa_exporter.rules.yml) has alert rules for Prometheus or vmalert. They use only the metrics of the exporter: a printer that waits for a person, PrusaLink that fails while the printer is on, UDP metrics that stop, slow scrapes, and errors of the exporter. `mise run test-alerts` runs their unit tests.
+
 ## Running
 
 ### Docker
