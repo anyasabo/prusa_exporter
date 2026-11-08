@@ -8,56 +8,65 @@ import (
 
 func TestParsePoint(t *testing.T) {
 	t.Parallel()
+	f := func(k string, v float64) field { return field{key: k, kind: valueFloat, num: v} }
 	tests := []struct {
 		name  string
 		line  string
-		want  *point
+		want  point
 		isErr bool
 	}{
 		{
 			name: "float",
 			line: "temp_noz v=215.500000 123",
-			want: &point{Name: "temp_noz", Tags: map[string]string{}, Fields: map[string]any{"v": 215.5}, Delta: 123, HasDelta: true},
+			want: point{Name: "temp_noz", Fields: []field{f("v", 215.5)}, Delta: 123, HasDelta: true},
 		},
 		{
 			name: "integer with tags",
 			line: "fan,fan=print,t=1 rpm=1500i -5",
-			want: &point{Name: "fan", Tags: map[string]string{"fan": "print", "t": "1"}, Fields: map[string]any{"rpm": int64(1500)}, Delta: -5, HasDelta: true},
+			want: point{
+				Name: "fan", Tags: []tag{{"fan", "print"}, {"t", "1"}},
+				Fields: []field{{key: "rpm", kind: valueInt, num: 1500}}, Delta: -5, HasDelta: true,
+			},
 		},
 		{
 			name: "event",
 			line: "probe_start v=T 0",
-			want: &point{Name: "probe_start", Tags: map[string]string{}, Fields: map[string]any{"v": true}, HasDelta: true},
+			want: point{Name: "probe_start", Fields: []field{{key: "v", kind: valueBool, num: 1}}, HasDelta: true},
+		},
+		{
+			name: "false event",
+			line: "probe_start v=F 0",
+			want: point{Name: "probe_start", Fields: []field{{key: "v", kind: valueBool}}, HasDelta: true},
 		},
 		{
 			name: "one and zero are numbers",
 			line: "phxy_orig c=1,p=0 0",
-			want: &point{Name: "phxy_orig", Tags: map[string]string{}, Fields: map[string]any{"c": 1.0, "p": 0.0}, HasDelta: true},
+			want: point{Name: "phxy_orig", Fields: []field{f("c", 1), f("p", 0)}, HasDelta: true},
 		},
 		{
 			name: "string with escapes, comma and space",
 			line: `print_filename v="a \"b\", c\\d" 7`,
-			want: &point{Name: "print_filename", Tags: map[string]string{}, Fields: map[string]any{"v": `a "b", c\d`}, Delta: 7, HasDelta: true},
+			want: point{Name: "print_filename", Fields: []field{{key: "v", kind: valueString, str: `a "b", c\d`}}, Delta: 7, HasDelta: true},
 		},
 		{
 			name: "quoted tag value",
 			line: `phxy_home,t="h" h=1i 0`,
-			want: &point{Name: "phxy_home", Tags: map[string]string{"t": "h"}, Fields: map[string]any{"h": int64(1)}, HasDelta: true},
+			want: point{Name: "phxy_home", Tags: []tag{{"t", "h"}}, Fields: []field{{key: "h", kind: valueInt, num: 1}}, HasDelta: true},
 		},
 		{
-			name: "no time",
-			line: "temp_bed v=60",
-			want: &point{Name: "temp_bed", Tags: map[string]string{}, Fields: map[string]any{"v": 60.0}},
+			name: "no time, more spaces",
+			line: "temp_bed  v=60 ",
+			want: point{Name: "temp_bed", Fields: []field{f("v", 60)}},
 		},
 		{
 			name: "time that is not a number",
 			line: "temp_bed v=60 soon",
-			want: &point{Name: "temp_bed", Tags: map[string]string{}, Fields: map[string]any{"v": 60.0}},
+			want: point{Name: "temp_bed", Fields: []field{f("v", 60)}},
 		},
 		{
 			name: "error point",
 			line: `tmc_read error="value_too_long" 4`,
-			want: &point{Name: "tmc_read", Tags: map[string]string{}, Fields: map[string]any{"error": "value_too_long"}, Delta: 4, HasDelta: true},
+			want: point{Name: "tmc_read", Fields: []field{{key: "error", kind: valueString, str: "value_too_long"}}, Delta: 4, HasDelta: true},
 		},
 		{name: "no fields", line: "temperature,sensor=nozzle", isErr: true},
 		{name: "too many parts", line: "t v=1 2 3", isErr: true},
@@ -69,20 +78,46 @@ func TestParsePoint(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := parsePoint(tt.line)
+			var s scratch
+			got, err := s.parsePoint(tt.line)
 			if tt.isErr {
 				if err == nil {
 					t.Fatalf("parsePoint(%q) = %+v, want an error", tt.line, got)
+				}
+				if len(s.tags) != 0 || len(s.fields) != 0 {
+					t.Errorf("parsePoint(%q) left tags or fields after an error", tt.line)
 				}
 				return
 			}
 			if err != nil {
 				t.Fatalf("parsePoint(%q) error = %v", tt.line, err)
 			}
+			if len(got.Tags) == 0 {
+				got.Tags = nil
+			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("parsePoint(%q) =\n%+v\nwant\n%+v", tt.line, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestParsePointsShareScratch(t *testing.T) {
+	t.Parallel()
+	var s scratch
+	a, err := s.parsePoint("a,x=1 v=1 0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.parsePoint("bad"); err == nil {
+		t.Fatal("no error")
+	}
+	b, err := s.parsePoint("b,y=2 v=2,w=3 0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Tags[0] != (tag{"x", "1"}) || len(a.Fields) != 1 || b.Tags[0] != (tag{"y", "2"}) || len(b.Fields) != 2 {
+		t.Errorf("points changed each other: %+v %+v", a, b)
 	}
 }
 
@@ -100,7 +135,7 @@ func TestUnquote(t *testing.T) {
 func TestSetSampleTimes(t *testing.T) {
 	t.Parallel()
 	received := time.Unix(1000, 0)
-	points := []*point{
+	points := []point{
 		{Delta: 0, HasDelta: true},
 		{Delta: 250_000, HasDelta: true},
 		{},
@@ -122,7 +157,8 @@ func FuzzParsePoint(f *testing.F) {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, line string) {
-		p, err := parsePoint(line)
+		var s scratch
+		p, err := s.parsePoint(line)
 		if err != nil {
 			return
 		}

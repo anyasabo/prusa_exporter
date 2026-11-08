@@ -3,6 +3,7 @@ package udp
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net"
 	"net/netip"
 	"time"
@@ -26,11 +27,18 @@ type selfMetrics struct {
 	bytes           prometheus.Counter
 	readErrors      prometheus.Counter
 	invalidMessages prometheus.Counter
-	points          *prometheus.CounterVec
+	pointsStored    prometheus.Counter
+	parseErrors     prometheus.Counter
+	errorPoints     prometheus.Counter
+	pointsDropped   prometheus.Counter
 	seriesExpired   prometheus.Counter
 }
 
 func newSelfMetrics(reg prometheus.Registerer, seriesCount func() float64) *selfMetrics {
+	points := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "prusa_exporter_udp_points_total",
+		Help: "Number of UDP points, by result. \"dropped\" is a point of a new series above the series limit, or with a conflicting type.",
+	}, []string{"result"})
 	m := &selfMetrics{
 		packets: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "prusa_exporter_udp_packets_received_total",
@@ -48,19 +56,17 @@ func newSelfMetrics(reg prometheus.Registerer, seriesCount func() float64) *self
 			Name: "prusa_exporter_udp_invalid_messages_total",
 			Help: "Number of UDP datagrams without a valid syslog header.",
 		}),
-		points: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "prusa_exporter_udp_points_total",
-			Help: "Number of UDP points, by result. \"dropped\" is a point of a new series above the series limit, or with a conflicting type.",
-		}, []string{"result"}),
+		// The counters of each result, so that a point does not look up the label.
+		pointsStored:  points.WithLabelValues(resultStored),
+		parseErrors:   points.WithLabelValues(resultParseError),
+		errorPoints:   points.WithLabelValues(resultErrorPoint),
+		pointsDropped: points.WithLabelValues(resultDropped),
 		seriesExpired: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "prusa_exporter_udp_series_expired_total",
 			Help: "Number of UDP series deleted because they had no point in the TTL.",
 		}),
 	}
-	for _, r := range []string{resultStored, resultParseError, resultErrorPoint, resultDropped} {
-		m.points.WithLabelValues(r)
-	}
-	reg.MustRegister(m.packets, m.bytes, m.readErrors, m.invalidMessages, m.points, m.seriesExpired,
+	reg.MustRegister(m.packets, m.bytes, m.readErrors, m.invalidMessages, points, m.seriesExpired,
 		prometheus.NewGaugeFunc(prometheus.GaugeOpts{
 			Name: "prusa_exporter_udp_series",
 			Help: "Number of UDP series in memory.",
@@ -69,31 +75,37 @@ func newSelfMetrics(reg prometheus.Registerer, seriesCount func() float64) *self
 }
 
 // Handle processes one datagram from the address from.
-func (c *Collector) Handle(data []byte, from netip.AddrPort, received time.Time) {
+func (c *Collector) Handle(ctx context.Context, data []byte, from netip.AddrPort, received time.Time) {
 	c.metrics.packets.Inc()
 	c.metrics.bytes.Add(float64(len(data)))
 
-	msg, err := parseMessage(string(data))
+	mac, lines, err := parseMessage(string(data))
 	if err != nil {
 		c.metrics.invalidMessages.Inc()
-		c.logger.Debug("Invalid UDP message", "from", from, "err", err)
+		if c.logger.Enabled(ctx, slog.LevelDebug) {
+			c.logger.DebugContext(ctx, "Invalid UDP message", "from", from, "err", err)
+		}
 		return
 	}
-	points := make([]*point, 0, len(msg.Points))
-	for _, line := range msg.Points {
-		p, err := parsePoint(line)
+	s := scratchPool.Get().(*scratch)
+	defer scratchPool.Put(s)
+	s.reset()
+	for line, rest := nextLine(lines); line != ""; line, rest = nextLine(rest) {
+		p, err := s.parsePoint(line)
 		if err != nil {
 			// The firmware can send a raw value that is not a point, for example from tmc_read.
-			c.metrics.points.WithLabelValues(resultParseError).Inc()
-			c.logger.Debug("Cannot parse a UDP point", "line", line, "err", err)
+			c.metrics.parseErrors.Inc()
+			if c.logger.Enabled(ctx, slog.LevelDebug) {
+				c.logger.DebugContext(ctx, "Cannot parse a UDP point", "line", line, "err", err)
+			}
 			continue
 		}
-		points = append(points, p)
+		s.points = append(s.points, p)
 	}
-	setSampleTimes(points, received)
-	stored, dropped := c.record(msg.Hostname, from.Addr().Unmap().String(), points, received)
-	c.metrics.points.WithLabelValues(resultStored).Add(float64(stored))
-	c.metrics.points.WithLabelValues(resultDropped).Add(float64(dropped))
+	setSampleTimes(s.points, received)
+	stored, dropped := c.record(ctx, mac, from.Addr().Unmap(), s.points, received)
+	c.metrics.pointsStored.Add(float64(stored))
+	c.metrics.pointsDropped.Add(float64(dropped))
 }
 
 // Serve reads datagrams from conn until ctx ends, and gives them to c. It closes conn.
@@ -115,6 +127,6 @@ func (c *Collector) Serve(ctx context.Context, conn *net.UDPConn) error {
 			c.logger.Warn("Cannot read from the UDP socket", "err", err)
 			continue
 		}
-		c.Handle(buf[:n], from, time.Now())
+		c.Handle(ctx, buf[:n], from, time.Now())
 	}
 }

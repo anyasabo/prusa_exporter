@@ -2,19 +2,40 @@ package udp
 
 import (
 	"errors"
-	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
+
+type valueKind uint8
+
+const (
+	valueFloat valueKind = iota
+	valueInt
+	valueBool
+	valueString
+)
+
+type tag struct{ key, value string }
+
+// field is one field of a point. num has the value of a number or a bool (1 or 0).
+type field struct {
+	key  string
+	kind valueKind
+	num  float64
+	str  string
+}
 
 // point is one line of the printer, in the InfluxDB line protocol of the firmware:
 //
 //	name[,tag=value...] field=value[,field=value...] [delta]
+//
+// The strings refer to the datagram. Copy a string before the collector keeps it.
 type point struct {
 	Name   string
-	Tags   map[string]string
-	Fields map[string]any // int64, float64, bool or string
+	Tags   []tag
+	Fields []field
 	// Delta is the time of the point in µs after the "tm" time of the message header.
 	// HasDelta is false if the line has no time.
 	Delta    int64
@@ -23,64 +44,116 @@ type point struct {
 	Time time.Time
 }
 
-func parsePoint(line string) (*point, error) {
-	parts := splitUnquoted(line, ' ')
-	if len(parts) < 2 || len(parts) > 3 {
-		return nil, fmt.Errorf("line has %d parts, not 2 or 3", len(parts))
-	}
-	p := &point{Tags: map[string]string{}, Fields: map[string]any{}}
+// scratch holds the points of one datagram. The tags and fields of the points are
+// parts of the tags and fields slices. scratchPool keeps the slices for the next
+// datagram, so a datagram needs few allocations.
+type scratch struct {
+	points []point
+	tags   []tag
+	fields []field
+}
 
-	nameTags := splitUnquoted(parts[0], ',')
-	p.Name = nameTags[0]
+var scratchPool = sync.Pool{New: func() any { return &scratch{} }}
+
+func (s *scratch) reset() {
+	clear(s.points)
+	s.points = s.points[:0]
+	clear(s.tags)
+	s.tags = s.tags[:0]
+	clear(s.fields)
+	s.fields = s.fields[:0]
+}
+
+// parsePoint parses one line into a point. The tags and fields go into s.
+func (s *scratch) parsePoint(line string) (point, error) {
+	tagStart, fieldStart := len(s.tags), len(s.fields)
+	p, err := s.parse(line)
+	if err != nil {
+		s.tags, s.fields = s.tags[:tagStart], s.fields[:fieldStart]
+		return point{}, err
+	}
+	p.Tags = s.tags[tagStart:len(s.tags):len(s.tags)]
+	p.Fields = s.fields[fieldStart:len(s.fields):len(s.fields)]
+	return p, nil
+}
+
+var (
+	errParts        = errors.New("line does not have 2 or 3 parts")
+	errNoName       = errors.New("line has no name")
+	errInvalidTag   = errors.New("invalid tag")
+	errInvalidField = errors.New("invalid field")
+)
+
+func (s *scratch) parse(line string) (point, error) {
+	var p point
+	nameTags, rest := nextUnquoted(line, ' ')
+	fields, rest := nextUnquoted(rest, ' ')
+	timeStr, rest := nextUnquoted(rest, ' ')
+	if nameTags == "" || fields == "" || rest != "" {
+		return p, errParts
+	}
+
+	p.Name, nameTags = nextUnquoted(nameTags, ',')
 	if p.Name == "" {
-		return nil, errors.New("line has no name")
+		return p, errNoName
 	}
-	for _, tag := range nameTags[1:] {
-		k, v, ok := strings.Cut(tag, "=")
+	for nameTags != "" {
+		var t string
+		t, nameTags = nextUnquoted(nameTags, ',')
+		k, v, ok := strings.Cut(t, "=")
 		if !ok || k == "" {
-			return nil, fmt.Errorf("invalid tag %q", tag)
+			return p, errInvalidTag
 		}
-		p.Tags[k] = unquote(v)
+		s.tags = append(s.tags, tag{k, unquote(v)})
 	}
 
-	for _, field := range splitUnquoted(parts[1], ',') {
-		k, v, ok := strings.Cut(field, "=")
+	for fields != "" {
+		var f string
+		f, fields = nextUnquoted(fields, ',')
+		k, v, ok := strings.Cut(f, "=")
 		if !ok || k == "" {
-			return nil, fmt.Errorf("invalid field %q", field)
+			return p, errInvalidField
 		}
-		p.Fields[k] = parseValue(v)
+		s.fields = append(s.fields, parseField(k, v))
 	}
 
-	if len(parts) == 3 {
-		if d, err := strconv.ParseInt(parts[2], 10, 64); err == nil {
+	if timeStr != "" {
+		if d, err := strconv.ParseInt(timeStr, 10, 64); err == nil {
 			p.Delta, p.HasDelta = d, true
 		}
 	}
 	return p, nil
 }
 
-// parseValue returns the field value as int64 ("5i"), float64, bool ("T") or string.
-func parseValue(v string) any {
+// parseField returns the field with the value as an integer ("5i"), a float, a bool
+// ("T") or a string.
+func parseField(k, v string) field {
 	if n, ok := strings.CutSuffix(v, "i"); ok {
 		if i, err := strconv.ParseInt(n, 10, 64); err == nil {
-			return i
+			return field{key: k, kind: valueInt, num: float64(i)}
 		}
 	}
 	if f, err := strconv.ParseFloat(v, 64); err == nil {
-		return f
+		return field{key: k, kind: valueFloat, num: f}
 	}
 	// After the float, so that "1" and "0" stay numbers.
 	if b, err := strconv.ParseBool(v); err == nil {
-		return b
+		f := field{key: k, kind: valueBool}
+		if b {
+			f.num = 1
+		}
+		return f
 	}
-	return unquote(v)
+	return field{key: k, kind: valueString, str: unquote(v)}
 }
 
-// splitUnquoted splits s at each sep that is not in a quoted string and not escaped
-// with a backslash. Empty parts between two separators are removed for ' '.
-func splitUnquoted(s string, sep byte) []string {
-	var r []string
-	start := 0
+// nextUnquoted returns the part of s before the first sep that is not in a quoted
+// string and not escaped with a backslash, and the rest after sep. For ' ', it skips
+// the separators at the start, so that more spaces count as one.
+func nextUnquoted(s string, sep byte) (part, rest string) {
+	if sep == ' ' {
+		s = strings.TrimLeft(s, " ")
+	}
 	quoted := false
 	for i := 0; i < len(s); i++ {
 		switch c := s[i]; {
@@ -89,16 +162,10 @@ func splitUnquoted(s string, sep byte) []string {
 		case c == '"':
 			quoted = !quoted
 		case c == sep && !quoted:
-			if sep != ' ' || start < i {
-				r = append(r, s[start:i])
-			}
-			start = i + 1
+			return s[:i], s[i+1:]
 		}
 	}
-	if sep != ' ' || start < len(s) {
-		r = append(r, s[start:])
-	}
-	return r
+	return s, ""
 }
 
 // unquote removes the double quotes around s and the backslash escapes in it.
@@ -129,16 +196,16 @@ func unquote(s string) string {
 // message. It sends the message just after it adds the last point. Thus the point
 // with the largest time is approximately the receive time, and each other point is
 // earlier by the difference.
-func setSampleTimes(points []*point, received time.Time) {
+func setSampleTimes(points []point, received time.Time) {
 	var latest int64
 	found := false
-	for _, p := range points {
-		if p.HasDelta && (!found || p.Delta > latest) {
+	for i := range points {
+		if p := &points[i]; p.HasDelta && (!found || p.Delta > latest) {
 			latest, found = p.Delta, true
 		}
 	}
-	for _, p := range points {
-		if p.HasDelta {
+	for i := range points {
+		if p := &points[i]; p.HasDelta {
 			p.Time = received.Add(-time.Duration(latest-p.Delta) * time.Microsecond)
 		}
 	}
@@ -147,9 +214,8 @@ func setSampleTimes(points []*point, received time.Time) {
 // errorMessage returns the message of an error point. An error point has only the
 // field "error" with a string value.
 func errorMessage(p *point) (string, bool) {
-	if len(p.Fields) != 1 {
+	if len(p.Fields) != 1 || p.Fields[0].key != "error" || p.Fields[0].kind != valueString {
 		return "", false
 	}
-	msg, ok := p.Fields["error"].(string)
-	return msg, ok
+	return p.Fields[0].str, true
 }

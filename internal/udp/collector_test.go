@@ -46,7 +46,7 @@ func compare(t *testing.T, c prometheus.Collector, want string, names ...string)
 func TestCollectorKinds(t *testing.T) {
 	t.Parallel()
 	c, self := newTestCollector(t, Options{})
-	c.Handle(msg(
+	c.Handle(t.Context(), msg(
 		"temp_noz v=215.5 0",
 		"fan,fan=print rpm=1500i,pwm=128i 10",
 		"probe_start v=T 20",
@@ -113,8 +113,8 @@ prusa_exporter_udp_packets_received_total 1
 func TestCollectorInfoReplacesValue(t *testing.T) {
 	t.Parallel()
 	c, _ := newTestCollector(t, Options{})
-	c.Handle(msg(`filament v="PLA" 0`), printer, t0)
-	c.Handle(msg(`filament v="PETG" 0`), printer, t0)
+	c.Handle(t.Context(), msg(`filament v="PLA" 0`), printer, t0)
+	c.Handle(t.Context(), msg(`filament v="PETG" 0`), printer, t0)
 	compare(t, c, `
 # HELP prusa_filament_info String UDP metric "filament" from the printer firmware. The label "value" holds the last string. The value is always 1.
 # TYPE prusa_filament_info gauge
@@ -125,7 +125,7 @@ prusa_filament_info{printer_address="192.168.1.10",printer_mac="AA:BB",value="PE
 func TestCollectorVaryingTags(t *testing.T) {
 	t.Parallel()
 	c, _ := newTestCollector(t, Options{})
-	c.Handle(msg("loadcell v=1 0", "loadcell,t=2 v=2 0"), printer, t0)
+	c.Handle(t.Context(), msg("loadcell v=1 0", "loadcell,t=2 v=2 0"), printer, t0)
 	compare(t, c, `
 # HELP prusa_loadcell UDP metric "loadcell" from the printer firmware, float value.
 # TYPE prusa_loadcell gauge
@@ -151,8 +151,8 @@ func TestCollectorDrops(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			c, _ := newTestCollector(t, tt.opts)
-			c.Handle(msg(tt.points...), printer, t0)
-			if got := testutil.ToFloat64(c.metrics.points.WithLabelValues(resultDropped)); got != tt.want {
+			c.Handle(t.Context(), msg(tt.points...), printer, t0)
+			if got := testutil.ToFloat64(c.metrics.pointsDropped); got != tt.want {
 				t.Errorf("dropped = %v, want %v", got, tt.want)
 			}
 			// A scrape must not fail.
@@ -168,8 +168,8 @@ func TestCollectorDrops(t *testing.T) {
 func TestCollectorTTL(t *testing.T) {
 	t.Parallel()
 	c, _ := newTestCollector(t, Options{SeriesTTL: time.Minute})
-	c.Handle(msg("temp v=1 0", `s v="x" 0`, "e v=T 0"), printer, t0)
-	c.Handle(msg("fresh v=1 0"), printer, t0.Add(50*time.Second))
+	c.Handle(t.Context(), msg("temp v=1 0", `s v="x" 0`, "e v=T 0"), printer, t0)
+	c.Handle(t.Context(), msg("fresh v=1 0"), printer, t0.Add(50*time.Second))
 	c.now = func() time.Time { return t0.Add(90 * time.Second) }
 
 	if got := testutil.CollectAndCount(c, "prusa_temp", "prusa_s_info", "prusa_e_total", "prusa_fresh"); got != 2 {
@@ -184,7 +184,7 @@ func TestCollectorSampleTimestamps(t *testing.T) {
 	t.Parallel()
 	for _, enabled := range []bool{false, true} {
 		c, _ := newTestCollector(t, Options{SampleTimestamps: enabled})
-		c.Handle(msg("a v=1 0", "b v=2 500000"), printer, t0)
+		c.Handle(t.Context(), msg("a v=1 0", "b v=2 500000"), printer, t0)
 		reg := prometheus.NewRegistry()
 		reg.MustRegister(c)
 		mfs, err := reg.Gather()
@@ -211,7 +211,7 @@ func TestCollectorSampleTimestamps(t *testing.T) {
 func TestCollectorInvalidMessage(t *testing.T) {
 	t.Parallel()
 	c, _ := newTestCollector(t, Options{})
-	c.Handle([]byte("hello"), printer, t0)
+	c.Handle(t.Context(), []byte("hello"), printer, t0)
 	if got := testutil.ToFloat64(c.metrics.invalidMessages); got != 1 {
 		t.Errorf("invalid messages = %v, want 1", got)
 	}
@@ -227,7 +227,7 @@ func TestCollectorConcurrent(t *testing.T) {
 	for range 8 {
 		wg.Go(func() {
 			for range 200 {
-				c.Handle(msg("a v=1 0", "e v=T 0", `s v="x" 0`), printer, t0)
+				c.Handle(t.Context(), msg("a v=1 0", "e v=T 0", `s v="x" 0`), printer, t0)
 				testutil.CollectAndCount(c)
 			}
 		})

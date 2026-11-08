@@ -33,15 +33,30 @@ func BenchmarkHandle(b *testing.B) {
 	b.SetBytes(int64(len(data)))
 	b.ReportAllocs()
 	for b.Loop() {
-		c.Handle(data, printer, t0)
+		c.Handle(b.Context(), data, printer, t0)
 	}
 }
 
 func BenchmarkCollect(b *testing.B) {
 	c, _ := newTestCollector(b, Options{})
-	c.Handle(benchDatagram(), printer, t0)
+	c.Handle(b.Context(), benchDatagram(), printer, t0)
 	b.ReportAllocs()
 	for b.Loop() {
 		testutil.CollectAndCount(c)
+	}
+}
+
+// TestHandleAllocations makes sure that a datagram for known series allocates only
+// the copy of the datagram. The exporter can run on a very small host.
+func TestHandleAllocations(t *testing.T) {
+	if raceEnabled {
+		t.Skip("the race detector adds allocations")
+	}
+	c, _ := newTestCollector(t, Options{EventMetrics: testEvents})
+	data := benchDatagram()
+	ctx := t.Context()
+	c.Handle(ctx, data, printer, t0) // make the series
+	if n := testing.AllocsPerRun(100, func() { c.Handle(ctx, data, printer, t0) }); n > 1 {
+		t.Errorf("Handle allocates %v times for each datagram, want 1 or less", n)
 	}
 }
