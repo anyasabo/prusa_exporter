@@ -9,6 +9,7 @@
 - [prusa\_exporter](#prusa_exporter)
   - [UDP metrics](#udp-metrics)
     - [How to manually activate UDP metrics](#how-to-manually-activate-udp-metrics)
+    - [UDP counters](#udp-counters)
   - [Prusa Link Metrics](#prusa-link-metrics)
     - [Guide how to get infomration from the printer](#guide-how-to-get-infomration-from-the-printer)
   - [Running](#running)
@@ -63,6 +64,21 @@ Of course you can configure metrics with gcode as well - that gcode can be found
 ### How to manually activate UDP metrics
 
 I've prepared quick guide where you can learn how to manually activate UDP metrics in the printer. You can find it in here, in [UDP.md](docs/readme/udp/UDP.md). If you are using older firmware then you can try to use older guide but beware that it is not supported. That can be found in [UDP_OLD_FW.md](docs/readme/udp_old_fw/UDP_OLD_FW.md).
+
+### UDP counters
+
+The exporter makes these counters at 0 when a printer sends its first packet. Thus a dashboard can tell "no events" from "no data". Counters do not expire.
+
+- `prusa_udp_packets_total{printer_mac,printer_address}`: the UDP datagrams from the printer.
+- `prusa_udp_points_total{printer_mac,printer_address}`: the points that the exporter parsed, error points and event points included.
+- `prusa_udp_point_errors_all_total{printer_mac,printer_address}`: the error points (`name error="..."`) of all metrics. The exporter drops these points.
+- `prusa_udp_point_errors_total{metric,printer_mac,printer_address}`: the error points of each metric. A series starts with the first error of that metric.
+- `prusa_<event>_total{printer_mac,printer_address}`: one counter for each event metric in the option `udp_event_metrics` of the `exporter:` section. The default list has all event metrics of the Buddy firmware: `app_start`, `crash_repeated`, `maintask_loop`, `modbus_reqfail`, `power_panic` and `probe_start`. An event metric that is not in the list gets its counter with its first point.
+
+An event metric has two sources for its count:
+
+1. Stock firmware sends one point `name v=T` for each event. The exporter counts these points from the time it starts. The rate limit of the firmware and lost UDP packets can drop events.
+2. A firmware can also send the count since boot at a fixed interval, also when the count is 0, as an integer field `n`: `probe_start n=5i <time>`. If the metric is an event metric (it is in `udp_event_metrics`, or the exporter received a `v=T` point for it), `prusa_<name>_total` then shows the value of the printer. After the first `n` point of a printer, the exporter ignores the `v=T` points of that metric for that printer. At the switch, the counter can jump to the value of the printer. After a printer restart, the count goes down to 0. `rate()` and `increase()` see this as a counter reset. For a metric that is not an event metric, the field `n` stays the gauge `prusa_<name>_n`.
 
 ## Prusa Link Metrics
 

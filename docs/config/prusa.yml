@@ -3,8 +3,13 @@ printers:
     username: maker
     password: <password>
     name: <your_printer_name> # it's optional, only showed in Grafana dashboard
-    type: MINI # MK35 / MK35S / MK39 / MK39S / MK4 / MK4S / XL / IX / Core One / Core One L# Optional settings of the exporter. The values here are the defaults.
+    type: MINI # MK35 / MK35S / MK39 / MK39S / MK4 / MK4S / XL / IX / Core One / Core One L
+
+# Optional settings of the exporter. The values here are the defaults.
 # exporter:
 #   udp_series_ttl: 10m # a UDP gauge or info series without a new point for this time goes away
 #   udp_sample_timestamps: false # add the printer time of the point to each UDP sample (the scraper must honor timestamps)
 #   prusalink_scrape_budget: 8s # maximum time for the PrusaLink requests of one printer in one scrape
+#   # Event metrics (v=T) of the firmware. The first packet of a printer makes prusa_<name>_total at 0
+#   # for each name. An event that is not in the list gets its counter with its first point. [] disables it.
+#   udp_event_metrics: [app_start, crash_repeated, maintask_loop, modbus_reqfail, power_panic, probe_start]

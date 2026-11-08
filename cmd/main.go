@@ -79,6 +79,7 @@ func Run() {
 	udp.Init(udpRegistry, udp.Options{
 		SeriesTTL:        config.Exporter.UDPSeriesTTL,
 		SampleTimestamps: config.Exporter.UDPSampleTimestamps,
+		EventMetrics:     config.Exporter.UDPEventMetrics,
 	})
 
 	// starting syslog server

@@ -467,3 +467,195 @@ func BenchmarkRecordPoint(b *testing.B) {
 		collector.recordPoint(p, "benchmark_metric", now)
 	}
 }
+
+// testEvents is the default list of known events in prusa.yml.
+var testEvents = []string{"app_start", "crash_repeated", "maintask_loop", "modbus_reqfail", "power_panic", "probe_start"}
+
+const testLabels = "printer_address=192.168.1.100,printer_mac=ABC123"
+
+// newEventRegistry calls Init with the known events and a fake clock.
+// It returns the registry and a pointer to the clock time.
+func newEventRegistry(t *testing.T) (*prometheus.Registry, *time.Time) {
+	t.Helper()
+	reg := prometheus.NewRegistry()
+	Init(reg, Options{SeriesTTL: 10 * time.Minute, EventMetrics: testEvents})
+	now := time.Now()
+	collector.now = func() time.Time { return now }
+	return reg, &now
+}
+
+// wantSamples fails the test for each series in want that is missing or has a
+// different value.
+func wantSamples(t *testing.T, reg *prometheus.Registry, want map[string]float64) {
+	t.Helper()
+	samples := gatherSamples(t, reg)
+	for k, v := range want {
+		if got, ok := samples[k]; !ok || got != v {
+			t.Errorf("series %s = %v (present %v), want %v. All: %v", k, got, ok, v, samples)
+		}
+	}
+}
+
+// The first packet of a printer makes the known event counters and the totals at 0.
+// Later points increment them.
+func TestFirstPacketZeroCounters(t *testing.T) {
+	reg, _ := newEventRegistry(t)
+
+	processLines(`temp_bed v=60.000000 0`)
+
+	want := map[string]float64{
+		"prusa_udp_points_total{" + testLabels + "}":           1,
+		"prusa_udp_packets_total{" + testLabels + "}":          1,
+		"prusa_udp_point_errors_all_total{" + testLabels + "}": 0,
+	}
+	for _, e := range testEvents {
+		want["prusa_"+e+"_total{"+testLabels+"}"] = 0
+	}
+	wantSamples(t, reg, want)
+	types := gatherTypes(t, reg)
+	for _, name := range []string{"prusa_probe_start_total", "prusa_udp_points_total", "prusa_udp_packets_total", "prusa_udp_point_errors_all_total"} {
+		if types[name] != dto.MetricType_COUNTER {
+			t.Errorf("%s type = %v, want COUNTER", name, types[name])
+		}
+	}
+	if _, ok := gatherSamples(t, reg)["prusa_udp_point_errors_total{metric=,"+testLabels+"}"]; ok {
+		t.Error("the labelled error counter must not have a series with metric=\"\"")
+	}
+
+	processLines(
+		`probe_start v=T 0`,
+		`probe_start v=T 10`,
+		`tmc_read error="value_too_long" 20`,
+	)
+	want = map[string]float64{
+		"prusa_udp_points_total{" + testLabels + "}":                       4,
+		"prusa_udp_packets_total{" + testLabels + "}":                      2,
+		"prusa_udp_point_errors_all_total{" + testLabels + "}":             1,
+		"prusa_udp_point_errors_total{metric=tmc_read," + testLabels + "}": 1,
+		"prusa_probe_start_total{" + testLabels + "}":                      2,
+		"prusa_app_start_total{" + testLabels + "}":                        0,
+	}
+	wantSamples(t, reg, want)
+}
+
+// An event that is not in the list gets its counter with its first point.
+func TestUnknownEventFirstPoint(t *testing.T) {
+	reg, _ := newEventRegistry(t)
+
+	processLines(`temp_bed v=60.000000 0`)
+	if _, ok := gatherSamples(t, reg)["prusa_new_event_total{"+testLabels+"}"]; ok {
+		t.Fatal("prusa_new_event_total exists before its first point")
+	}
+	processLines(`new_event v=T 0`)
+	wantSamples(t, reg, map[string]float64{"prusa_new_event_total{" + testLabels + "}": 1})
+}
+
+// The zero counters and the totals do not expire.
+func TestZeroCountersNoExpiry(t *testing.T) {
+	reg, now := newEventRegistry(t)
+
+	processLines(`temp_bed v=60.000000 0`)
+	*now = now.Add(time.Hour)
+
+	samples := gatherSamples(t, reg)
+	if _, ok := samples["prusa_temp_bed{"+testLabels+"}"]; ok {
+		t.Error("the gauge prusa_temp_bed did not expire")
+	}
+	want := map[string]float64{
+		"prusa_udp_points_total{" + testLabels + "}":           1,
+		"prusa_udp_packets_total{" + testLabels + "}":          1,
+		"prusa_udp_point_errors_all_total{" + testLabels + "}": 0,
+	}
+	for _, e := range testEvents {
+		want["prusa_"+e+"_total{"+testLabels+"}"] = 0
+	}
+	wantSamples(t, reg, want)
+}
+
+// A second printer gets its own zero counters. The first printer keeps its counts.
+func TestZeroCountersSecondPrinter(t *testing.T) {
+	reg, _ := newEventRegistry(t)
+
+	processLines(`probe_start v=T 0`)
+	process(format.LogParts{
+		"hostname": "DEF456",
+		"client":   "192.168.1.101:5000",
+		"message":  "msg=1,tm=1000000,v=4 temp_bed v=60.0 0\n",
+	}, "prusa_")
+
+	wantSamples(t, reg, map[string]float64{
+		"prusa_probe_start_total{" + testLabels + "}":                               1,
+		"prusa_probe_start_total{printer_address=192.168.1.101,printer_mac=DEF456}": 0,
+	})
+}
+
+// A count point (n=<int>) of an event metric sets the counter to the count of the
+// printer. After it, v=T points do not change the counter.
+func TestEventCountSwitchOver(t *testing.T) {
+	reg, _ := newEventRegistry(t)
+	key := "prusa_probe_start_total{" + testLabels + "}"
+
+	processLines(`probe_start v=T 0`, `probe_start v=T 10`)
+	wantSamples(t, reg, map[string]float64{key: 2})
+
+	processLines(`probe_start n=7i 0`)
+	wantSamples(t, reg, map[string]float64{key: 7})
+
+	processLines(`probe_start v=T 0`)
+	wantSamples(t, reg, map[string]float64{key: 7})
+
+	processLines(`probe_start v=T 0`, `probe_start n=9i 10`)
+	wantSamples(t, reg, map[string]float64{key: 9})
+
+	samples := gatherSamples(t, reg)
+	if _, ok := samples["prusa_probe_start_n{"+testLabels+"}"]; ok {
+		t.Error("the count of an event metric must not make the gauge prusa_probe_start_n")
+	}
+	if typ := gatherTypes(t, reg)["prusa_probe_start_total"]; typ != dto.MetricType_COUNTER {
+		t.Errorf("prusa_probe_start_total type = %v, want COUNTER", typ)
+	}
+}
+
+// After a printer restart, the count of the printer goes down. The counter takes the
+// lower value, and rate() sees a counter reset.
+func TestEventCountPrinterRestart(t *testing.T) {
+	reg, _ := newEventRegistry(t)
+	key := "prusa_power_panic_total{" + testLabels + "}"
+
+	processLines(`power_panic n=5i 0`)
+	wantSamples(t, reg, map[string]float64{key: 5})
+	processLines(`power_panic n=0i 0`)
+	wantSamples(t, reg, map[string]float64{key: 0})
+	processLines(`power_panic n=1i 0`)
+	wantSamples(t, reg, map[string]float64{key: 1})
+}
+
+// An event metric that is not in the list becomes a count metric after its first v=T
+// point. Before that, its field n is a gauge.
+func TestEventCountUnknownEvent(t *testing.T) {
+	reg, _ := newEventRegistry(t)
+
+	processLines(`new_event n=3i 0`)
+	wantSamples(t, reg, map[string]float64{"prusa_new_event_n{" + testLabels + "}": 3})
+
+	processLines(`new_event v=T 0`)
+	processLines(`new_event n=4i 0`)
+	wantSamples(t, reg, map[string]float64{"prusa_new_event_total{" + testLabels + "}": 4})
+}
+
+// For a metric that is not an event metric, the field n stays a gauge.
+func TestFieldNNotEvent(t *testing.T) {
+	reg, _ := newEventRegistry(t)
+
+	processLines(`some_metric n=12i,x=3i 0`)
+	wantSamples(t, reg, map[string]float64{
+		"prusa_some_metric_n{" + testLabels + "}": 12,
+		"prusa_some_metric_x{" + testLabels + "}": 3,
+	})
+	if _, ok := gatherSamples(t, reg)["prusa_some_metric_total{"+testLabels+"}"]; ok {
+		t.Error("the field n of a metric that is not an event made a counter")
+	}
+	if typ := gatherTypes(t, reg)["prusa_some_metric_n"]; typ != dto.MetricType_GAUGE {
+		t.Errorf("prusa_some_metric_n type = %v, want GAUGE", typ)
+	}
+}

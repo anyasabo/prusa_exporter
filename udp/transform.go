@@ -31,6 +31,11 @@ func process(data format.LogParts, prefix string) {
 	received := time.Now()
 	address := strings.Split(ip, ":")[0]
 	lastPush.WithLabelValues(mac, address).Set(float64(received.Unix())) // Set the last push timestamp
+	packetsTotal.WithLabelValues(mac, address).Inc()
+	// WithLabelValues makes the series at 0 if it does not exist.
+	points := pointsTotal.WithLabelValues(mac, address)
+	errorsAll := pointErrorsAll.WithLabelValues(mac, address)
+	collector.initPrinter(prefix, map[string]string{"printer_mac": mac, "printer_address": address})
 
 	log.Debug().Msg(fmt.Sprintf("Processing data for printer %s", mac))
 	metrics, err := processMessage(data["message"].(string), mac, prefix, ip)
@@ -39,22 +44,24 @@ func process(data format.LogParts, prefix string) {
 		return
 	}
 
-	points := make([]*point, 0, len(metrics))
+	parsed := make([]*point, 0, len(metrics))
 	for _, line := range metrics {
 		point, err := parseLineProtocol(line)
 		if err != nil {
 			log.Debug().Msgf("Error parsing line '%s': %v", line, err) // printer sends error with several measurements - tmc_read returns "value_too_long" as well as some raw output data
 			continue
 		}
-		points = append(points, point)
+		parsed = append(parsed, point)
 	}
-	setSampleTimes(points, received)
+	setSampleTimes(parsed, received)
+	points.Add(float64(len(parsed)))
 
-	for _, point := range points {
+	for _, point := range parsed {
 		fwName := strings.TrimPrefix(point.Measurement, prefix)
 		if msg, ok := errorMessage(point); ok {
 			// The firmware sends "name error=\"...\"" when it cannot record a value.
 			pointErrors.WithLabelValues(fwName, mac, address).Inc()
+			errorsAll.Inc()
 			log.Debug().Msgf("Printer %s: error point for metric %s: %s", mac, fwName, msg)
 			continue
 		}

@@ -26,6 +26,29 @@ var (
 		},
 		[]string{"metric", "printer_mac", "printer_address"},
 	)
+	// The counters below have only the printer labels. The first packet of a printer
+	// makes them at 0, so that a dashboard can tell "no points" from "no series".
+	pointErrorsAll = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "prusa_udp_point_errors_all_total",
+			Help: "Number of error points (error=\"...\") from the printer firmware, all metrics. The exporter drops these points. prusa_udp_point_errors_total has the count for each metric.",
+		},
+		[]string{"printer_mac", "printer_address"},
+	)
+	pointsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "prusa_udp_points_total",
+			Help: "Number of points from the printer firmware that the exporter parsed, error points and event points included.",
+		},
+		[]string{"printer_mac", "printer_address"},
+	)
+	packetsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "prusa_udp_packets_total",
+			Help: "Number of UDP datagrams from the printer that the exporter received.",
+		},
+		[]string{"printer_mac", "printer_address"},
+	)
 	udpRegistry *prometheus.Registry
 
 	// collector holds the series made from the UDP points. Init sets it.
@@ -39,6 +62,10 @@ type Options struct {
 	SeriesTTL time.Duration
 	// SampleTimestamps adds the estimated time of the last point to each sample.
 	SampleTimestamps bool
+	// EventMetrics are the firmware names (without the prefix) of the event metrics.
+	// The first packet of a printer makes the counter of each event at 0.
+	// An event that is not in the list gets its counter with its first point.
+	EventMetrics []string
 }
 
 // Init initializes the Prometheus udp registry.
@@ -48,9 +75,11 @@ func Init(udpMainRegistry *prometheus.Registry, opts Options) {
 	collector = newUDPCollector(opts)
 	lastPush.Reset()
 	pointErrors.Reset()
+	pointErrorsAll.Reset()
+	pointsTotal.Reset()
+	packetsTotal.Reset()
 
-	udpRegistry.MustRegister(lastPush)
-	udpRegistry.MustRegister(pointErrors)
+	udpRegistry.MustRegister(lastPush, pointErrors, pointErrorsAll, pointsTotal, packetsTotal)
 	udpRegistry.MustRegister(collector)
 }
 
@@ -92,6 +121,9 @@ type series struct {
 	sampled time.Time
 	// info is the string of a kindInfo series.
 	info string
+	// printerCount is true after the first count point (n=<int>) of an event counter.
+	// Then the value is the count of the printer, and v=T points do not change it.
+	printerCount bool
 }
 
 // udpCollector is an unchecked prometheus.Collector. It keeps the last value of each
@@ -102,6 +134,13 @@ type udpCollector struct {
 	series   map[string]*series
 	warned   map[string]bool
 	ttl      time.Duration
+	// events are the firmware names of the known event metrics.
+	events []string
+	// eventSet holds the same names as events.
+	eventSet map[string]bool
+	// printers holds the printers that sent a packet. The key is seriesKey of the
+	// printer labels.
+	printers map[string]bool
 	// timestamps adds the sample time to each exposed sample.
 	timestamps bool
 	// now returns the current time. Tests replace it.
@@ -109,14 +148,21 @@ type udpCollector struct {
 }
 
 func newUDPCollector(opts Options) *udpCollector {
-	return &udpCollector{
+	c := &udpCollector{
 		families:   make(map[string]*family),
 		series:     make(map[string]*series),
 		warned:     make(map[string]bool),
 		ttl:        opts.SeriesTTL,
+		events:     append([]string(nil), opts.EventMetrics...),
+		eventSet:   make(map[string]bool, len(opts.EventMetrics)),
+		printers:   make(map[string]bool),
 		timestamps: opts.SampleTimestamps,
 		now:        time.Now,
 	}
+	for _, e := range opts.EventMetrics {
+		c.eventSet[e] = true
+	}
+	return c
 }
 
 // Describe sends no descriptors. This makes the collector unchecked, so the label
@@ -193,6 +239,9 @@ func sortedKeys(m map[string]string) []string {
 var reservedNames = map[string]bool{
 	"prusa_last_push_timestamp":            true,
 	"prusa_udp_point_errors_total":         true,
+	"prusa_udp_point_errors_all_total":     true,
+	"prusa_udp_points_total":               true,
+	"prusa_udp_packets_total":              true,
 	"promhttp_metric_handler_errors_total": true,
 }
 
@@ -235,6 +284,34 @@ func (c *udpCollector) getSeries(key, name string, kind metricKind, help string,
 	return s
 }
 
+// initPrinter makes the counter of each known event at 0 for the printer labels,
+// the first time that the printer sends a packet. It does not change a counter that
+// exists. prefix is the prefix of the metric names.
+func (c *udpCollector) initPrinter(prefix string, labels map[string]string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	printerKey := seriesKey("", labels)
+	if c.printers[printerKey] {
+		return
+	}
+	c.printers[printerKey] = true
+	for _, event := range c.events {
+		name := prefix + event + "_total"
+		c.getSeries(seriesKey(name, labels), name, kindCounter, counterHelp(event, "v"), labels)
+	}
+}
+
+// isEvent tells if the metric is an event metric: it is in the list of known events,
+// or a v=T point made its counter. The caller holds c.mu.
+func (c *udpCollector) isEvent(measurement, fwName string) bool {
+	if c.eventSet[fwName] {
+		return true
+	}
+	fam, ok := c.families[measurement+"_total"]
+	return ok && fam.kind == kindCounter
+}
+
 // recordPoint stores the fields of one point. fwName is the metric name of the firmware,
 // without the prefix. received is the time when the exporter received the point.
 func (c *udpCollector) recordPoint(p point, fwName string, received time.Time) {
@@ -247,6 +324,21 @@ func (c *udpCollector) recordPoint(p point, fwName string, received time.Time) {
 			metricName = metricName + "_" + key
 		}
 
+		if n, ok := value.(int64); ok && key == "n" && c.isEvent(p.Measurement, fwName) {
+			// The firmware sends the count of events since boot as n=<int>. This value
+			// replaces the count of the v=T points. A decrease is a printer restart.
+			name := p.Measurement + "_total"
+			s := c.getSeries(seriesKey(name, p.Tags), name, kindCounter, counterHelp(fwName, "v"), p.Tags)
+			if s == nil {
+				continue
+			}
+			s.value = float64(n)
+			s.printerCount = true
+			s.updated = received
+			s.sampled = p.Time
+			continue
+		}
+
 		if b, ok := value.(bool); ok {
 			// The firmware sends an event as v=T. Count the events.
 			if !b {
@@ -255,7 +347,7 @@ func (c *udpCollector) recordPoint(p point, fwName string, received time.Time) {
 			}
 			name := metricName + "_total"
 			s := c.getSeries(seriesKey(name, p.Tags), name, kindCounter, counterHelp(fwName, key), p.Tags)
-			if s == nil {
+			if s == nil || s.printerCount {
 				continue
 			}
 			s.value++
@@ -315,7 +407,7 @@ func infoHelp(fwName, field string) string {
 // counterHelp returns the help text for an event field.
 func counterHelp(fwName, field string) string {
 	if field == "v" || field == "value" {
-		return fmt.Sprintf("Number of event points of UDP metric %q from the printer firmware, since the exporter started.", fwName)
+		return fmt.Sprintf("Number of events of UDP metric %q from the printer firmware. If the firmware sends n=<count>, the value is the count of the printer since boot. Else it is the number of event points since the exporter started.", fwName)
 	}
 	return fmt.Sprintf("Number of event points of UDP metric %q, field %q, from the printer firmware, since the exporter started.", fwName, field)
 }

@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -325,5 +326,33 @@ printers:
 		if err != nil {
 			b.Errorf("LoadConfig() error: %v", err)
 		}
+	}
+}
+
+func TestLoadConfigUDPEventMetrics(t *testing.T) {
+	tests := []struct {
+		name string
+		yaml string
+		want []string
+	}{
+		{"default", "printers: []\n", []string{"app_start", "crash_repeated", "maintask_loop", "modbus_reqfail", "power_panic", "probe_start"}},
+		{"set", "exporter:\n  udp_event_metrics: [probe_start, my_event]\nprinters: []\n", []string{"probe_start", "my_event"}},
+		{"empty", "exporter:\n  udp_event_metrics: []\nprinters: []\n", []string{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "prusa.yml")
+			if err := os.WriteFile(path, []byte(tt.yaml), 0644); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := LoadConfig(path, 10, "", false, "", "", false)
+			if err != nil {
+				t.Fatalf("LoadConfig() error = %v", err)
+			}
+			got := cfg.Exporter.UDPEventMetrics
+			if got == nil || !slices.Equal(got, tt.want) {
+				t.Errorf("UDPEventMetrics = %#v, want %#v", got, tt.want)
+			}
+		})
 	}
 }
