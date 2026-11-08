@@ -156,10 +156,15 @@ func run(ctx context.Context, f *flags, logger *slog.Logger) error {
 
 	// HTTP.
 	mux := http.NewServeMux()
+	httpDuration := prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "prusa_exporter_http_request_duration_seconds",
+		Help:    "Duration of the HTTP requests to the PrusaLink and UDP metrics endpoints.",
+		Buckets: []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
+	}, []string{"handler", "code"})
+	self.MustRegister(httpDuration)
 	instrument := func(handler string, h http.Handler) http.Handler {
-		return promhttp.InstrumentHandlerCounter(httpRequests.MustCurryWith(prometheus.Labels{"handler": handler}), h)
+		return promhttp.InstrumentHandlerDuration(httpDuration.MustCurryWith(prometheus.Labels{"handler": handler}), h)
 	}
-	self.MustRegister(httpRequests)
 	mux.Handle(f.telemetryPath, promhttp.InstrumentMetricHandler(self, promhttp.HandlerFor(self, promhttp.HandlerOpts{})))
 	mux.Handle(f.prusaLinkPath, instrument("prusalink", plExporter.Handler()))
 	mux.Handle(f.udpPath, instrument("udp", promhttp.HandlerFor(udpRegistry, promhttp.HandlerOpts{
@@ -229,8 +234,3 @@ func run(ctx context.Context, f *flags, logger *slog.Logger) error {
 	}
 	return g.Wait()
 }
-
-var httpRequests = prometheus.NewCounterVec(prometheus.CounterOpts{
-	Name: "prusa_exporter_http_requests_total",
-	Help: "Number of HTTP requests to the metrics endpoints, by handler and status code.",
-}, []string{"handler", "code"})

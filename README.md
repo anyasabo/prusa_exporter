@@ -124,7 +124,7 @@ I've prepared quick guide where you can learn how to get credentials and IP addr
 - `prusa_exporter_udp_packets_received_total`, `prusa_exporter_udp_received_bytes_total`, `prusa_exporter_udp_read_errors_total`, `prusa_exporter_udp_invalid_messages_total`.
 - `prusa_exporter_udp_points_total{result}`: `stored`, `parse_error`, `error_point` or `dropped`. The exporter drops a point of a new series above the series limit (`udp_max_series`, default 10000). It also drops a point with a type that conflicts with the first point of the metric.
 - `prusa_exporter_udp_series` and `prusa_exporter_udp_series_expired_total`.
-- `prusa_exporter_loki_pushes_total{result}` and `prusa_exporter_http_requests_total{handler,code}`.
+- `prusa_exporter_loki_pushes_total{result}` and `prusa_exporter_http_request_duration_seconds{handler,code}`.
 
 Scrape `/metrics` as a third job, next to `/metrics/prusalink` and `/metrics/udp`.
 
