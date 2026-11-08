@@ -15,6 +15,10 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// version is the version on the root page. Set it at build time with
+// -ldflags "-X github.com/pstrobl96/prusa_exporter/cmd.version=VERSION".
+var version = "2.0.0"
+
 var (
 	configFile             = kingpin.Flag("config.file", "Configuration file for prusa_exporter.").Default("./prusa.yml").ExistingFile()
 	metricsPath            = kingpin.Flag("exporter.metrics-path", "Path where to expose Prusa Link metrics.").Default("/metrics/prusalink").String()
@@ -36,7 +40,7 @@ var (
 // Run function to start the exporter
 func Run() {
 	kingpin.Parse()
-	log.Info().Msg("Prusa exporter starting")
+	log.Info().Msg("Prusa exporter " + version + " starting")
 
 	if *udpMetricsPath == *metricsPath {
 		log.Panic().Msg("udp_metrics_path must be different from metrics_path")
@@ -100,7 +104,7 @@ func Run() {
 	// Handle job image requests and root path
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		html := `<html>
-    <head><title>prusa_exporter 2.0.0-alpha2</title></head>
+    <head><title>prusa_exporter ` + version + `</title></head>
     <body>
     <h1>prusa_exporter</h1>
 	<p>Syslog server running at - <b>` + *syslogListenAddress + `</b></p>
