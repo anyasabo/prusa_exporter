@@ -165,6 +165,28 @@ func TestRecordPointVaryingTags(t *testing.T) {
 	}
 }
 
+// An event (v=T) is a counter that increments once for each point.
+func TestRecordPointEvents(t *testing.T) {
+	reg := newTestRegistry(t)
+	now := time.Now()
+
+	for i := 0; i < 3; i++ {
+		p := mustParse(t, "prusa_probe_start,printer_mac=ABC123 v=T 0")
+		collector.recordPoint(p, "probe_start", now)
+	}
+
+	samples := gatherSamples(t, reg)
+	if got := samples["prusa_probe_start_total{printer_mac=ABC123}"]; got != 3 {
+		t.Errorf("prusa_probe_start_total = %v, want 3. All: %v", got, samples)
+	}
+	if _, ok := samples["prusa_probe_start{printer_mac=ABC123}"]; ok {
+		t.Error("the old gauge prusa_probe_start must not exist")
+	}
+	if typ := gatherTypes(t, reg)["prusa_probe_start_total"]; typ != dto.MetricType_COUNTER {
+		t.Errorf("prusa_probe_start_total type = %v, want COUNTER", typ)
+	}
+}
+
 func TestConcurrentRecordPoint(t *testing.T) {
 	reg := newTestRegistry(t)
 

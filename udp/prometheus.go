@@ -40,9 +40,14 @@ type metricKind int
 
 const (
 	kindGauge metricKind = iota
+	// kindCounter counts the event points (v=T) of a metric.
+	kindCounter
 )
 
 func (k metricKind) valueType() prometheus.ValueType {
+	if k == kindCounter {
+		return prometheus.CounterValue
+	}
 	return prometheus.GaugeValue
 }
 
@@ -178,6 +183,21 @@ func (c *udpCollector) recordPoint(p point, fwName string, received time.Time) {
 			metricName = metricName + "_" + key
 		}
 
+		if b, ok := value.(bool); ok {
+			// The firmware sends an event as v=T. Count the events.
+			if !b {
+				log.Debug().Msgf("UDP metric %s: ignore a false boolean", metricName)
+				continue
+			}
+			s := c.getSeries(metricName+"_total", kindCounter, counterHelp(fwName, key), p.Tags)
+			if s == nil {
+				continue
+			}
+			s.value++
+			s.updated = received
+			continue
+		}
+
 		s := c.getSeries(metricName, kindGauge, gaugeHelp(fwName, key, value), p.Tags)
 		if s == nil {
 			continue
@@ -185,6 +205,14 @@ func (c *udpCollector) recordPoint(p point, fwName string, received time.Time) {
 		s.value = toFloat64(value)
 		s.updated = received
 	}
+}
+
+// counterHelp returns the help text for an event field.
+func counterHelp(fwName, field string) string {
+	if field == "v" || field == "value" {
+		return fmt.Sprintf("Number of event points of UDP metric %q from the printer firmware, since the exporter started.", fwName)
+	}
+	return fmt.Sprintf("Number of event points of UDP metric %q, field %q, from the printer firmware, since the exporter started.", fwName, field)
 }
 
 // gaugeHelp returns the help text for a numeric field.
@@ -201,8 +229,6 @@ func valueTypeName(value interface{}) string {
 		return "integer"
 	case float64:
 		return "float"
-	case bool:
-		return "boolean"
 	case string:
 		return "string"
 	default:
