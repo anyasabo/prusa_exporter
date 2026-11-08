@@ -50,9 +50,10 @@ linters:
         - (net/http.RoundTripper).RoundTrip(
     sloglint:
       kv-only: true
+      # The keys are the ECS constants of internal/logging.
+      no-raw-keys: true
       no-global: all
       static-msg: true
-      key-naming-case: snake
   exclusions:
     presets:
       - std-error-handling

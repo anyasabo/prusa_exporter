@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anyasabo/prusa_exporter/internal/config"
+	"github.com/anyasabo/prusa_exporter/internal/logging"
 )
 
 const (
@@ -110,7 +110,7 @@ func RunGcode(ctx context.Context, targets []*Target, o GcodeOptions, logger *sl
 	var wg sync.WaitGroup
 	for _, t := range targets {
 		wg.Go(func() {
-			l := logger.With(config.LabelAddress, t.Client.Printer.Address, config.LabelName, t.Client.Printer.Name)
+			l := logger.With(logging.PrinterAddress, t.Client.Printer.Address, logging.PrinterName, t.Client.Printer.Name)
 			for {
 				attempt, cancel := context.WithTimeout(ctx, o.Timeout)
 				err := EnableUDPMetrics(attempt, t.Client, o)
@@ -120,7 +120,7 @@ func RunGcode(ctx context.Context, targets []*Target, o GcodeOptions, logger *sl
 					l.Info("Sent and started the G-code that enables the UDP metrics")
 					return
 				}
-				l.Warn("Cannot enable the UDP metrics, will try again", "err", err, "retry_in", o.RetryInterval)
+				l.Warn("Cannot enable the UDP metrics, will try again", logging.ErrorMessage, err, logging.RetryIn, o.RetryInterval.String())
 				select {
 				case <-ctx.Done():
 					return

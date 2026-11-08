@@ -105,8 +105,11 @@ The linters are in `.golangci.yml`. The ones that affect how to write code:
 - `wrapcheck`: wrap each error from another module with context. Errors from our own packages,
   `http.Client.Do`, `errgroup.Wait` and a `RoundTripper` that passes the error through are
   exempt.
-- `sloglint`: key-value pairs, snake_case keys, constant messages, no global logger. Give
-  loggers as parameters, not in a context.
+- `sloglint`: key-value pairs, constant messages, no global logger, and each key is a
+  constant from `internal/logging`. The keys follow ECS: an ECS field where one exists (for
+  example `error.message`), else a field in the namespace `prusa.`. Never use a key that is an
+  ECS object, for example `error`, `source`, `host` or `labels`. `TestKeys` checks the catalog.
+  Give loggers as parameters, not in a context.
 - `nolintlint`: each `//nolint` must have a reason and must be necessary.
 - `contextcheck`: give a context down the call chain. Do not make `context.Background()` in a
   callee.

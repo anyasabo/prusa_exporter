@@ -15,6 +15,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/anyasabo/prusa_exporter/internal/config"
+	"github.com/anyasabo/prusa_exporter/internal/logging"
 )
 
 // States are the values of printer.state in /api/v1/status (DeviceState in the
@@ -206,7 +207,7 @@ type countingErrorLog struct {
 
 func (l *countingErrorLog) Println(v ...any) {
 	l.errors.Inc()
-	l.logger.Error("PrusaLink metrics handler", "err", fmt.Sprint(v...))
+	l.logger.Error("PrusaLink metrics handler", logging.ErrorMessage, fmt.Sprint(v...))
 }
 
 // scrapeBudget returns the smaller of budget and the scrape timeout in header, minus
@@ -302,7 +303,7 @@ func (e *Exporter) fetch(ctx context.Context, c *Client) (snapshot, error) {
 
 func (e *Exporter) collectTarget(ctx context.Context, t *Target, ch chan<- prometheus.Metric) {
 	p := t.Client.Printer
-	logger := e.logger.With(config.LabelAddress, p.Address, config.LabelName, p.Name)
+	logger := e.logger.With(logging.PrinterAddress, p.Address, logging.PrinterName, p.Name)
 	fixed := []string{p.Address, p.Type, p.Name}
 	em := emitter{e: e, ch: ch}
 
@@ -312,7 +313,7 @@ func (e *Exporter) collectTarget(ctx context.Context, t *Target, ch chan<- prome
 	s, err := e.fetch(ctx, t.Client)
 	em.send(mScrapeDuration, time.Since(start).Seconds(), fixed...)
 	if err != nil {
-		logger.Error("PrusaLink scrape failed", "err", err)
+		logger.Error("PrusaLink scrape failed", logging.ErrorMessage, err)
 		em.send(mUp, 0, fixed...)
 		return
 	}

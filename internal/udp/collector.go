@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/anyasabo/prusa_exporter/internal/logging"
 )
 
 // The label names that identify a printer on the UDP metrics.
@@ -202,7 +204,7 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 	for _, s := range c.series {
 		m, err := prometheus.NewConstMetric(s.desc, s.family.kind.valueType(), s.value, s.labelValues...)
 		if err != nil {
-			c.warnOnce(s.family.name, "Cannot expose a UDP metric", "metric", s.family.name, "err", err)
+			c.warnOnce(s.family.name, "Cannot expose a UDP metric", logging.MetricName, s.family.name, logging.ErrorMessage, err)
 			continue
 		}
 		if c.opts.SampleTimestamps && !s.sampled.IsZero() {
@@ -310,7 +312,7 @@ func (c *Collector) getSeries(help helpSpec, extra tag) *series {
 		return s
 	}
 	if reservedNames[string(c.nameBuf)] {
-		c.warnOnce(string(c.nameBuf), "A UDP metric has a reserved name. The exporter ignores it.", "metric", string(c.nameBuf))
+		c.warnOnce(string(c.nameBuf), "A UDP metric has a reserved name. The exporter ignores it.", logging.MetricName, string(c.nameBuf))
 		return nil
 	}
 	fam, ok := c.families[string(c.nameBuf)]
@@ -320,11 +322,11 @@ func (c *Collector) getSeries(help helpSpec, extra tag) *series {
 		c.families[name] = fam
 	}
 	if fam.kind != help.kind {
-		c.warnOnce(fam.name, "A UDP point needs a different metric type than the first point of the metric. The exporter ignores the point.", "metric", fam.name)
+		c.warnOnce(fam.name, "A UDP point needs a different metric type than the first point of the metric. The exporter ignores the point.", logging.MetricName, fam.name)
 		return nil
 	}
 	if c.opts.MaxSeries > 0 && len(c.series) >= c.opts.MaxSeries {
-		c.warnOnce("\xffmax_series", "The UDP series limit is reached. The exporter drops the points of new series.", "limit", c.opts.MaxSeries)
+		c.warnOnce("\xffmax_series", "The UDP series limit is reached. The exporter drops the points of new series.", logging.SeriesLimit, c.opts.MaxSeries)
 		return nil
 	}
 
@@ -340,7 +342,7 @@ func (c *Collector) getSeries(help helpSpec, extra tag) *series {
 	}
 	desc := prometheus.NewDesc(fam.name, fam.help, names, nil)
 	if _, err := prometheus.NewConstMetric(desc, help.kind.valueType(), 0, values...); err != nil {
-		c.warnOnce(fam.name, "Cannot make a UDP metric", "metric", fam.name, "labels", names, "err", err)
+		c.warnOnce(fam.name, "Cannot make a UDP metric", logging.MetricName, fam.name, logging.MetricLabels, names, logging.ErrorMessage, err)
 		return nil
 	}
 	s := &series{family: fam, desc: desc, labelValues: values}
@@ -372,7 +374,7 @@ func (c *Collector) record(ctx context.Context, mac string, addr netip.Addr, poi
 			st.errors++
 			c.metrics.errorPoints.Inc()
 			if c.logger.Enabled(ctx, slog.LevelDebug) {
-				c.logger.DebugContext(ctx, "Error point from the printer", labelMAC, mac, "metric", p.Name, "error", msg)
+				c.logger.DebugContext(ctx, "Error point from the printer", logging.PrinterMAC, mac, logging.MetricName, p.Name, logging.PointError, msg)
 			}
 			continue
 		}

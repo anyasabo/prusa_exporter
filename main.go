@@ -30,6 +30,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/anyasabo/prusa_exporter/internal/config"
+	"github.com/anyasabo/prusa_exporter/internal/logging"
 	"github.com/anyasabo/prusa_exporter/internal/prusalink"
 	"github.com/anyasabo/prusa_exporter/internal/udp"
 )
@@ -88,25 +89,25 @@ func main() {
 	app := kingpin.New(name, "Prometheus exporter for Prusa printers.")
 	f, err := parseFlags(app, os.Args[1:])
 	app.FatalIfError(err, "")
-	logger := promslog.New(&f.promslogConfig)
+	logger := logging.New(&f.promslogConfig, os.Stderr, name, version.Version)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	err = run(ctx, f, logger)
 	stop()
 	if err != nil {
-		logger.Error("Exit with error", "err", err)
+		logger.Error("Exit with error", logging.ErrorMessage, err)
 		os.Exit(1)
 	}
 }
 
 func run(ctx context.Context, f *flags, logger *slog.Logger) error {
-	logger.Info("Starting "+name, "version", version.Info(), "build_context", version.BuildContext())
+	logger.Info("Starting "+name, logging.BuildInfo, version.Info(), logging.BuildContext, version.BuildContext())
 
 	cfg, err := config.Load(f.configFile)
 	if err != nil {
 		return err
 	}
 	for _, key := range cfg.Deprecated() {
-		logger.Warn("The configuration file has a deprecated key. The exporter ignores it.", "key", key)
+		logger.Warn("The configuration file has a deprecated key. The exporter ignores it.", logging.ConfigKey, key)
 	}
 
 	// The registry of the exporter itself.
@@ -196,7 +197,7 @@ func run(ctx context.Context, f *flags, logger *slog.Logger) error {
 
 	g, ctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
-		logger.Info("Listening for UDP metrics", "address", conn.LocalAddr().String())
+		logger.Info("Listening for UDP metrics", logging.ServerAddress, conn.LocalAddr().String())
 		return udpCollector.Serve(ctx, conn)
 	})
 	g.Go(func() error {

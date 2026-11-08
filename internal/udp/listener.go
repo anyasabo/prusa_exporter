@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/anyasabo/prusa_exporter/internal/logging"
 )
 
 // The values of the label "result" of prusa_exporter_udp_points_total.
@@ -83,7 +85,7 @@ func (c *Collector) Handle(ctx context.Context, data []byte, from netip.AddrPort
 	if err != nil {
 		c.metrics.invalidMessages.Inc()
 		if c.logger.Enabled(ctx, slog.LevelDebug) {
-			c.logger.DebugContext(ctx, "Invalid UDP message", "from", from, "err", err)
+			c.logger.DebugContext(ctx, "Invalid UDP message", logging.SourceIP, from.Addr().String(), logging.SourcePort, from.Port(), logging.ErrorMessage, err)
 		}
 		return
 	}
@@ -96,7 +98,7 @@ func (c *Collector) Handle(ctx context.Context, data []byte, from netip.AddrPort
 			// The firmware can send a raw value that is not a point, for example from tmc_read.
 			c.metrics.parseErrors.Inc()
 			if c.logger.Enabled(ctx, slog.LevelDebug) {
-				c.logger.DebugContext(ctx, "Cannot parse a UDP point", "line", line, "err", err)
+				c.logger.DebugContext(ctx, "Cannot parse a UDP point", logging.PointLine, line, logging.ErrorMessage, err)
 			}
 			continue
 		}
@@ -111,7 +113,7 @@ func (c *Collector) Handle(ctx context.Context, data []byte, from netip.AddrPort
 // Serve reads datagrams from conn until ctx ends, and gives them to c. It closes conn.
 func (c *Collector) Serve(ctx context.Context, conn *net.UDPConn) error {
 	if err := conn.SetReadBuffer(readBufferSize); err != nil {
-		c.logger.Warn("Cannot set the UDP receive buffer", "err", err)
+		c.logger.Warn("Cannot set the UDP receive buffer", logging.ErrorMessage, err)
 	}
 	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
 	defer stop()
@@ -124,7 +126,7 @@ func (c *Collector) Serve(ctx context.Context, conn *net.UDPConn) error {
 				return nil
 			}
 			c.metrics.readErrors.Inc()
-			c.logger.Warn("Cannot read from the UDP socket", "err", err)
+			c.logger.Warn("Cannot read from the UDP socket", logging.ErrorMessage, err)
 			continue
 		}
 		c.Handle(ctx, buf[:n], from, time.Now())

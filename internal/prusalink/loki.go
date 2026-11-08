@@ -18,6 +18,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/anyasabo/prusa_exporter/internal/config"
+	"github.com/anyasabo/prusa_exporter/internal/logging"
 )
 
 // lokiRepushInterval is the time after which the exporter sends the thumbnail of the
@@ -93,12 +94,12 @@ func (p *LokiPusher) push(ctx context.Context, c *Client, jobName, jobPath strin
 	}
 	if err != nil {
 		p.pushes.WithLabelValues("thumbnail_error").Inc()
-		logger.Warn("Cannot get the job thumbnail", "err", err)
+		logger.Warn("Cannot get the job thumbnail", logging.ErrorMessage, err)
 		return false
 	}
 	if err := p.send(ctx, c, jobName, jobPath, base64.StdEncoding.EncodeToString(thumb)); err != nil {
 		p.pushes.WithLabelValues("push_error").Inc()
-		logger.Warn("Cannot push the job thumbnail to Loki", "err", err)
+		logger.Warn("Cannot push the job thumbnail to Loki", logging.ErrorMessage, err)
 		return false
 	}
 	p.pushes.WithLabelValues("success").Inc()

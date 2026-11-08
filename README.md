@@ -171,7 +171,7 @@ Run `prusa_exporter --help` for the full list.
 | `--loki.push-url` | | Loki push URL for the job thumbnail. Empty disables the push |
 | `--web.enable-pprof` | `false` | Serve the Go profiles on `/debug/pprof/` |
 | `--log.level` | `info` | `debug`, `info`, `warn` or `error` |
-| `--log.format` | `logfmt` | `logfmt` or `json` |
+| `--log.format` | `logfmt` | `logfmt` or `json`. `json` follows the [ECS logging specification](https://github.com/elastic/ecs-logging/blob/main/spec/spec.json) |
 
 ### Changes from 2.0.0
 
@@ -180,7 +180,7 @@ Run `prusa_exporter --help` for the full list.
 - Renamed metrics: `prusa_status_info` is `prusa_printer_state`, `prusa_job` is `prusa_job_info`, `prusa_axis` is `prusa_axis_position_meters`, `prusa_mmu` is `prusa_mmu_enabled`, `prusa_last_push_timestamp` is `prusa_last_push_timestamp_seconds`. `prusa_files_count` is removed.
 - `prusa_material_info` is always 1.
 - The default `common_labels` has no job labels.
-- The logs are logfmt by default. Use `--log.format=json` for JSON.
+- The logs are logfmt by default. `--log.format=json` writes ECS: `@timestamp`, `log.level`, `message`, `error.message`, and the custom fields in `prusa.*`, for example `prusa.printer.address`.
 
 ## Development
 
