@@ -184,3 +184,28 @@ func TestCollectThumbnailWithLoki(t *testing.T) {
 		t.Errorf("got %d thumbnail requests with Loki on, want 1", n)
 	}
 }
+
+// prusa_up is 0 if a required request fails, and then no other printer metric exists.
+func TestCollectUp(t *testing.T) {
+	for _, path := range []string{"", "/api/job", "/api/printer", "/api/version", "/api/v1/status", "/api/v1/info"} {
+		t.Run("fail "+path, func(t *testing.T) {
+			m, p := newMockPrinter(t)
+			if path != "" {
+				m.fail[path] = true
+			}
+			samples := collectSamples(t, testConfig(p))
+
+			want := 1.0
+			if path != "" {
+				want = 0
+			}
+			if up, ok := findSample(samples, MetricPrinterUp); !ok || up != want {
+				t.Errorf("%s = %v (present %v), want %v", MetricPrinterUp, up, ok, want)
+			}
+			_, hasFan := findSample(samples, MetricPrinterFanSpeedRpm)
+			if hasFan != (path == "") {
+				t.Errorf("%s present = %v, want %v", MetricPrinterFanSpeedRpm, hasFan, path == "")
+			}
+		})
+	}
+}

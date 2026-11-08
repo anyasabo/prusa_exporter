@@ -87,7 +87,7 @@ var metrics = []metricDesc{
 
 // Unlike `metrics`, these ignore common labels.
 var specialMetrics = []metricDesc{
-	{MetricPrinterUp, "Return information about online printers. If printer is registered as offline then returned value is 0.", []string{"printer_address", "printer_model", "printer_name"}},
+	{MetricPrinterUp, "1 if all required PrusaLink requests of the scrape succeeded, else 0.", []string{"printer_address", "printer_model", "printer_name"}},
 	{MetricPrinterUDPMetricsGcodeSent, "Return information if the UDP metrics gcode was sent successfully.", []string{"printer_address", "printer_model", "printer_name"}},
 
 	{MetricPrinterCurrentJob, "Returns information about the current print job.", []string{"printer_address", "printer_model", "printer_name", "printer_job_name", "printer_job_path"}},
@@ -182,16 +182,20 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 				return
 			}
 
+			// Status and info are required too. Without them, the fan, flow, nozzle
+			// and MMU metrics are 0, which is not true.
 			status, err := GetStatus(ctx, s)
-
 			if err != nil {
 				log.Error().Msg("Error while scraping status endpoint at " + s.Address + " - " + err.Error())
+				ch <- printerUp
+				return
 			}
 
 			info, err := GetInfo(ctx, s)
-
 			if err != nil {
 				log.Error().Msg("Error while scraping info endpoint at " + s.Address + " - " + err.Error())
+				ch <- printerUp
+				return
 			}
 
 			// Only Loki uses the thumbnail. Do not download it if Loki is off.
