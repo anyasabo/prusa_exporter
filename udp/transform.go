@@ -14,6 +14,12 @@ type point struct {
 	Measurement string
 	Tags        map[string]string
 	Fields      map[string]interface{} // Use interface{} to handle different field types
+	// Delta is the time of the point in µs after the "tm" time of the message header.
+	// HasDelta is false if the line has no time.
+	Delta    int64
+	HasDelta bool
+	// Time is the estimated wall time of the sample. It is zero if not known.
+	Time time.Time
 }
 
 func process(data format.LogParts, prefix string) {
@@ -33,13 +39,18 @@ func process(data format.LogParts, prefix string) {
 		return
 	}
 
+	points := make([]*point, 0, len(metrics))
 	for _, line := range metrics {
 		point, err := parseLineProtocol(line)
 		if err != nil {
 			log.Debug().Msgf("Error parsing line '%s': %v", line, err) // printer sends error with several measurements - tmc_read returns "value_too_long" as well as some raw output data
 			continue
 		}
+		points = append(points, point)
+	}
+	setSampleTimes(points, received)
 
+	for _, point := range points {
 		fwName := strings.TrimPrefix(point.Measurement, prefix)
 		if msg, ok := errorMessage(point); ok {
 			// The firmware sends "name error=\"...\"" when it cannot record a value.
@@ -49,6 +60,28 @@ func process(data format.LogParts, prefix string) {
 		}
 
 		collector.recordPoint(*point, fwName, received)
+	}
+}
+
+// setSampleTimes sets the wall time of each point of one message.
+//
+// The firmware gives each point a time in µs relative to the first point of the
+// message. It sends the message just after it adds the last point. Thus the point
+// with the largest time is approximately the receive time, and each other point is
+// earlier by the difference.
+func setSampleTimes(points []*point, received time.Time) {
+	var latest int64
+	found := false
+	for _, p := range points {
+		if p.HasDelta && (!found || p.Delta > latest) {
+			latest = p.Delta
+			found = true
+		}
+	}
+	for _, p := range points {
+		if p.HasDelta {
+			p.Time = received.Add(-time.Duration(latest-p.Delta) * time.Microsecond)
+		}
 	}
 }
 
@@ -148,6 +181,13 @@ func parseLineProtocol(line string) (*point, error) {
 			return nil, fmt.Errorf("invalid tag format: %s", tag)
 		}
 		p.Tags[tagParts[0]] = unquote(tagParts[1])
+	}
+
+	if len(parts) == 3 {
+		if d, err := strconv.ParseInt(parts[2], 10, 64); err == nil {
+			p.Delta = d
+			p.HasDelta = true
+		}
 	}
 
 	fieldStr := parts[1]

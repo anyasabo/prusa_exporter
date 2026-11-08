@@ -37,6 +37,8 @@ type Options struct {
 	// SeriesTTL is the time after which a gauge or info series without a new point
 	// goes away. Counters do not expire. Zero or less disables the expiry.
 	SeriesTTL time.Duration
+	// SampleTimestamps adds the estimated time of the last point to each sample.
+	SampleTimestamps bool
 }
 
 // Init initializes the Prometheus udp registry.
@@ -84,7 +86,10 @@ type series struct {
 	desc        *prometheus.Desc
 	labelValues []string
 	value       float64
-	updated     time.Time
+	// updated is the receive time of the last point. The TTL uses it.
+	updated time.Time
+	// sampled is the estimated printer time of the last point. It can be zero.
+	sampled time.Time
 	// info is the string of a kindInfo series.
 	info string
 }
@@ -97,17 +102,20 @@ type udpCollector struct {
 	series   map[string]*series
 	warned   map[string]bool
 	ttl      time.Duration
+	// timestamps adds the sample time to each exposed sample.
+	timestamps bool
 	// now returns the current time. Tests replace it.
 	now func() time.Time
 }
 
 func newUDPCollector(opts Options) *udpCollector {
 	return &udpCollector{
-		families: make(map[string]*family),
-		series:   make(map[string]*series),
-		warned:   make(map[string]bool),
-		ttl:      opts.SeriesTTL,
-		now:      time.Now,
+		families:   make(map[string]*family),
+		series:     make(map[string]*series),
+		warned:     make(map[string]bool),
+		ttl:        opts.SeriesTTL,
+		timestamps: opts.SampleTimestamps,
+		now:        time.Now,
 	}
 }
 
@@ -126,6 +134,9 @@ func (c *udpCollector) Collect(ch chan<- prometheus.Metric) {
 		if err != nil {
 			c.warnOnce(s.family.name, "Cannot expose UDP metric %s: %v", s.family.name, err)
 			continue
+		}
+		if c.timestamps && !s.sampled.IsZero() {
+			m = prometheus.NewMetricWithTimestamp(s.sampled, m)
 		}
 		ch <- m
 	}
@@ -236,11 +247,12 @@ func (c *udpCollector) recordPoint(p point, fwName string, received time.Time) {
 			}
 			s.value++
 			s.updated = received
+			s.sampled = p.Time
 			continue
 		}
 
 		if str, ok := value.(string); ok {
-			c.recordInfo(metricName+"_info", infoHelp(fwName, key), p.Tags, str, received)
+			c.recordInfo(metricName+"_info", infoHelp(fwName, key), p.Tags, str, received, p.Time)
 			continue
 		}
 
@@ -250,13 +262,14 @@ func (c *udpCollector) recordPoint(p point, fwName string, received time.Time) {
 		}
 		s.value = toFloat64(value)
 		s.updated = received
+		s.sampled = p.Time
 	}
 }
 
 // recordInfo stores a string as the label "value" of an info series with the value 1.
 // The tags without the string identify the series. Thus a new string replaces the old
 // label value, and each tag set has only one series. The caller holds c.mu.
-func (c *udpCollector) recordInfo(name, help string, tags map[string]string, str string, received time.Time) {
+func (c *udpCollector) recordInfo(name, help string, tags map[string]string, str string, received, sampled time.Time) {
 	key := seriesKey(name, tags)
 	if old, ok := c.series[key]; ok && old.info != str {
 		delete(c.series, key)
@@ -275,6 +288,7 @@ func (c *udpCollector) recordInfo(name, help string, tags map[string]string, str
 	s.value = 1
 	s.info = str
 	s.updated = received
+	s.sampled = sampled
 }
 
 // infoHelp returns the help text for a string field.

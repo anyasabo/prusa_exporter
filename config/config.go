@@ -34,6 +34,9 @@ type ExporterConfig struct {
 	// UDPSeriesTTL is the time after which a UDP gauge or info series without a new
 	// point goes away. Counters do not expire. Zero or less means DefaultUDPSeriesTTL.
 	UDPSeriesTTL time.Duration `yaml:"udp_series_ttl"`
+	// UDPSampleTimestamps adds the estimated printer time of the last point to each
+	// UDP sample. The scraper must honor the timestamps.
+	UDPSampleTimestamps bool `yaml:"udp_sample_timestamps"`
 }
 
 // Printers struct containing the printer configuration

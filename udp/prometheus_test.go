@@ -316,6 +316,64 @@ func TestSeriesTTL(t *testing.T) {
 	}
 }
 
+// With SampleTimestamps, each sample has the estimated printer time. The last point
+// of a message has the receive time. The other points are earlier by their offset.
+func TestSampleTimestamps(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	Init(reg, Options{SeriesTTL: 10 * time.Minute, SampleTimestamps: true})
+
+	before := time.Now()
+	processLines(
+		`temp_bed v=60.000000 0`,
+		`temp_noz v=215.000000 500000`,
+		`probe_start v=T 1000000`,
+	)
+	after := time.Now()
+
+	families, err := reg.Gather()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := make(map[string]int64)
+	for _, mf := range families {
+		for _, m := range mf.GetMetric() {
+			ts[mf.GetName()] = m.GetTimestampMs()
+		}
+	}
+
+	last := ts["prusa_probe_start_total"]
+	if last < before.UnixMilli() || last > after.UnixMilli() {
+		t.Errorf("last point time %d is not the receive time (%d to %d)", last, before.UnixMilli(), after.UnixMilli())
+	}
+	if d := last - ts["prusa_temp_noz"]; d != 500 {
+		t.Errorf("temp_noz is %d ms before the last point, want 500", d)
+	}
+	if d := last - ts["prusa_temp_bed"]; d != 1000 {
+		t.Errorf("temp_bed is %d ms before the last point, want 1000", d)
+	}
+	if ts["prusa_last_push_timestamp"] != 0 {
+		t.Error("prusa_last_push_timestamp must not have a timestamp")
+	}
+}
+
+// Without SampleTimestamps, no sample has a timestamp.
+func TestNoSampleTimestamps(t *testing.T) {
+	reg := newTestRegistry(t)
+	processLines(`temp_bed v=60.000000 0`)
+
+	families, err := reg.Gather()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, mf := range families {
+		for _, m := range mf.GetMetric() {
+			if m.TimestampMs != nil {
+				t.Errorf("%s has a timestamp", mf.GetName())
+			}
+		}
+	}
+}
+
 func TestConcurrentRecordPoint(t *testing.T) {
 	reg := newTestRegistry(t)
 

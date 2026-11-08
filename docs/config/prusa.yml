@@ -6,3 +6,4 @@ printers:
     type: MINI # MK35 / MK35S / MK39 / MK39S / MK4 / MK4S / XL / IX / Core One / Core One L# Optional settings of the exporter. The values here are the defaults.
 # exporter:
 #   udp_series_ttl: 10m # a UDP gauge or info series without a new point for this time goes away
+#   udp_sample_timestamps: false # add the printer time of the point to each UDP sample (the scraper must honor timestamps)
