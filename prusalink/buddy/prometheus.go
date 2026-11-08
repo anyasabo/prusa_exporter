@@ -194,17 +194,13 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 				log.Error().Msg("Error while scraping info endpoint at " + s.Address + " - " + err.Error())
 			}
 
-			if getStateFlag(printer) == 4 { // ensure that printer is printing
+			// Only Loki uses the thumbnail. Do not download it if Loki is off.
+			lokiURL := c.configuration.Exporter.LokiPushURL
+			if lokiURL != "" && getStateFlag(printer) == 4 { // ensure that printer is printing
 				go func() {
 					imageCtx, imageCancel := context.WithTimeout(context.Background(), c.configuration.Exporter.PrusaLinkScrapeBudget)
 					defer imageCancel()
 					image, err := GetJobImage(imageCtx, s, job.Job.File.Path)
-
-					if c.configuration.Exporter.LokiPushURL == "" {
-						log.Debug().Msg("Loki push URL not set, skipping pushing image to Loki")
-						return
-					}
-
 					if err != nil {
 						log.Error().Msg("Error getting job image from " + s.Address + " - " + err.Error())
 						return
@@ -215,7 +211,9 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 						return
 					}
 
-					PushImageToLoki(c.configuration.Exporter.LokiPushURL, s.Address, s.Type, s.Name, job.Job.File.Name, job.Job.File.Path, image)
+					if err := PushImageToLoki(lokiURL, s.Address, s.Type, s.Name, job.Job.File.Name, job.Job.File.Path, image); err != nil {
+						log.Error().Msg("Error pushing job image to Loki - " + err.Error())
+					}
 				}()
 			}
 

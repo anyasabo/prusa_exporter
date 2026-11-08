@@ -153,3 +153,34 @@ func TestCollectScrapeBudget(t *testing.T) {
 		t.Errorf("%s = %v, want 0", MetricPrinterUp, up)
 	}
 }
+
+// The exporter downloads the job thumbnail only if Loki is on.
+func TestCollectNoThumbnailWithoutLoki(t *testing.T) {
+	m, p := newMockPrinter(t)
+	m.printing = true
+
+	samples := collectSamples(t, testConfig(p))
+	if status, _ := findSample(samples, MetricPrinterStatus); status != 4 {
+		t.Fatalf("%s = %v, want 4 (printing)", MetricPrinterStatus, status)
+	}
+	time.Sleep(100 * time.Millisecond) // the download runs in a goroutine
+	if n := m.count("/thumb/l/usb/A.BGC"); n != 0 {
+		t.Errorf("got %d thumbnail requests with Loki off, want 0", n)
+	}
+}
+
+func TestCollectThumbnailWithLoki(t *testing.T) {
+	m, p := newMockPrinter(t)
+	m.printing = true
+	cfg := testConfig(p)
+	cfg.Exporter.LokiPushURL = "http://" + p.Address + "/loki/api/v1/push"
+
+	collectSamples(t, cfg)
+	deadline := time.Now().Add(2 * time.Second)
+	for m.count("/thumb/l/usb/A.BGC") == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if n := m.count("/thumb/l/usb/A.BGC"); n != 1 {
+		t.Errorf("got %d thumbnail requests with Loki on, want 1", n)
+	}
+}
