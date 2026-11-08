@@ -62,7 +62,8 @@ There is no global state and no default registry.
   `/api/v1/status` has a job.
 - `gcode.go` uploads and starts a G-code that sets the printer's metrics host to this exporter.
   `RunGcode` tries again until it succeeds. The metric lists in `gcode_metrics.go` are written
-  by hand from the firmware.
+  by hand. `TestFirmwareReference` checks them against `docs/firmware/*.json`. Make such a file
+  from a firmware ELF with `go run ./internal/tools/fwmetrics -elf FILE -model MODEL -firmware VERSION`.
 - `loki.go` pushes the job thumbnail to Loki: one time for each job, and again each 5 minutes.
 
 ### UDP path (`internal/udp`)

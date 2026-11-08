@@ -1,0 +1,828 @@
+{
+  "model": "coreonel",
+  "firmware": "9.0.0+17091.LOCAL (experiment branch, 76918075f)",
+  "metrics": [
+    {
+      "name": "adj_z",
+      "type": "float",
+      "min_interval_ms": 1500,
+      "enabled_by_default": true
+    },
+    {
+      "name": "app_start",
+      "type": "event",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "bed_voltage",
+      "type": "float",
+      "min_interval_ms": 1001,
+      "enabled_by_default": true
+    },
+    {
+      "name": "buddy_bom",
+      "type": "string",
+      "min_interval_ms": 65533,
+      "enabled_by_default": true
+    },
+    {
+      "name": "buddy_revision",
+      "type": "string",
+      "min_interval_ms": 65534,
+      "enabled_by_default": true
+    },
+    {
+      "name": "chamber_temp",
+      "type": "float",
+      "min_interval_ms": 1000,
+      "enabled_by_default": true
+    },
+    {
+      "name": "chamber_ttemp",
+      "type": "float",
+      "min_interval_ms": 1000,
+      "enabled_by_default": false
+    },
+    {
+      "name": "cmdcnt",
+      "type": "integer",
+      "min_interval_ms": 100,
+      "enabled_by_default": true
+    },
+    {
+      "name": "cpu_usage",
+      "type": "integer",
+      "min_interval_ms": 1000,
+      "enabled_by_default": true
+    },
+    {
+      "name": "crash",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "crash_repeated",
+      "type": "event",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "crash_stat",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "cur_mmu_imp",
+      "type": "float",
+      "min_interval_ms": 1008,
+      "enabled_by_default": true
+    },
+    {
+      "name": "door_sensor",
+      "type": "integer",
+      "min_interval_ms": 1100,
+      "enabled_by_default": true
+    },
+    {
+      "name": "esp_in",
+      "type": "custom",
+      "min_interval_ms": 1000,
+      "enabled_by_default": true
+    },
+    {
+      "name": "esp_out",
+      "type": "custom",
+      "min_interval_ms": 1000,
+      "enabled_by_default": true
+    },
+    {
+      "name": "eth_in",
+      "type": "custom",
+      "min_interval_ms": 1000,
+      "enabled_by_default": true
+    },
+    {
+      "name": "eth_out",
+      "type": "custom",
+      "min_interval_ms": 1000,
+      "enabled_by_default": true
+    },
+    {
+      "name": "excite_freq",
+      "type": "float",
+      "min_interval_ms": 100,
+      "enabled_by_default": false
+    },
+    {
+      "name": "fan",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "fan_hbr_speed",
+      "type": "integer",
+      "min_interval_ms": 502,
+      "enabled_by_default": false
+    },
+    {
+      "name": "fan_speed",
+      "type": "integer",
+      "min_interval_ms": 501,
+      "enabled_by_default": false
+    },
+    {
+      "name": "filament",
+      "type": "string",
+      "min_interval_ms": 10070,
+      "enabled_by_default": true
+    },
+    {
+      "name": "freq_gain",
+      "type": "custom",
+      "min_interval_ms": 100,
+      "enabled_by_default": true
+    },
+    {
+      "name": "fsensor",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": false
+    },
+    {
+      "name": "ftch_cmds",
+      "type": "integer",
+      "min_interval_ms": 100,
+      "enabled_by_default": true
+    },
+    {
+      "name": "ftch_dur",
+      "type": "integer",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "ftch_occ",
+      "type": "integer",
+      "min_interval_ms": 100,
+      "enabled_by_default": true
+    },
+    {
+      "name": "ftch_sdpos",
+      "type": "integer",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "ftch_status",
+      "type": "integer",
+      "min_interval_ms": 100,
+      "enabled_by_default": true
+    },
+    {
+      "name": "ftch_tstatus",
+      "type": "integer",
+      "min_interval_ms": 100,
+      "enabled_by_default": true
+    },
+    {
+      "name": "fw_version",
+      "type": "string",
+      "min_interval_ms": 65535,
+      "enabled_by_default": true
+    },
+    {
+      "name": "gcd_que_sz",
+      "type": "integer",
+      "min_interval_ms": 100,
+      "enabled_by_default": true
+    },
+    {
+      "name": "gcode",
+      "type": "string",
+      "min_interval_ms": 0,
+      "enabled_by_default": false
+    },
+    {
+      "name": "hbr_fan_act",
+      "type": "integer",
+      "min_interval_ms": 1000,
+      "enabled_by_default": false
+    },
+    {
+      "name": "heap",
+      "type": "custom",
+      "min_interval_ms": 503,
+      "enabled_by_default": true
+    },
+    {
+      "name": "heap_x",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "heater_current",
+      "type": "float",
+      "min_interval_ms": 1005,
+      "enabled_by_default": true
+    },
+    {
+      "name": "heater_enabled",
+      "type": "integer",
+      "min_interval_ms": 1500,
+      "enabled_by_default": true
+    },
+    {
+      "name": "heater_voltage",
+      "type": "float",
+      "min_interval_ms": 1003,
+      "enabled_by_default": true
+    },
+    {
+      "name": "home_diff",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "http_blk",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "input_current",
+      "type": "float",
+      "min_interval_ms": 1007,
+      "enabled_by_default": true
+    },
+    {
+      "name": "ipos_x",
+      "type": "integer",
+      "min_interval_ms": 10,
+      "enabled_by_default": false
+    },
+    {
+      "name": "ipos_y",
+      "type": "integer",
+      "min_interval_ms": 10,
+      "enabled_by_default": false
+    },
+    {
+      "name": "ipos_z",
+      "type": "integer",
+      "min_interval_ms": 10,
+      "enabled_by_default": false
+    },
+    {
+      "name": "is_printing",
+      "type": "integer",
+      "min_interval_ms": 5000,
+      "enabled_by_default": true
+    },
+    {
+      "name": "loadcell",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": false
+    },
+    {
+      "name": "loadcell_age",
+      "type": "integer",
+      "min_interval_ms": 0,
+      "enabled_by_default": false
+    },
+    {
+      "name": "loadcell_hp",
+      "type": "float",
+      "min_interval_ms": 0,
+      "enabled_by_default": false
+    },
+    {
+      "name": "loadcell_hysteresis",
+      "type": "float",
+      "min_interval_ms": 5015,
+      "enabled_by_default": true
+    },
+    {
+      "name": "loadcell_scale",
+      "type": "float",
+      "min_interval_ms": 5000,
+      "enabled_by_default": true
+    },
+    {
+      "name": "loadcell_threshold",
+      "type": "float",
+      "min_interval_ms": 5005,
+      "enabled_by_default": true
+    },
+    {
+      "name": "loadcell_threshold_cont",
+      "type": "float",
+      "min_interval_ms": 5010,
+      "enabled_by_default": true
+    },
+    {
+      "name": "loadcell_value",
+      "type": "float",
+      "min_interval_ms": 0,
+      "enabled_by_default": false
+    },
+    {
+      "name": "loadcell_xy",
+      "type": "float",
+      "min_interval_ms": 0,
+      "enabled_by_default": false
+    },
+    {
+      "name": "maintask_loop",
+      "type": "event",
+      "min_interval_ms": 0,
+      "enabled_by_default": false
+    },
+    {
+      "name": "mbl",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": false
+    },
+    {
+      "name": "mbl_adl",
+      "type": "float",
+      "min_interval_ms": 0,
+      "enabled_by_default": false
+    },
+    {
+      "name": "mbl_bcl",
+      "type": "float",
+      "min_interval_ms": 0,
+      "enabled_by_default": false
+    },
+    {
+      "name": "mbl_cl",
+      "type": "float",
+      "min_interval_ms": 0,
+      "enabled_by_default": false
+    },
+    {
+      "name": "mbl_cpl",
+      "type": "float",
+      "min_interval_ms": 0,
+      "enabled_by_default": false
+    },
+    {
+      "name": "mbl_dcl",
+      "type": "float",
+      "min_interval_ms": 0,
+      "enabled_by_default": false
+    },
+    {
+      "name": "mbl_dz",
+      "type": "float",
+      "min_interval_ms": 0,
+      "enabled_by_default": false
+    },
+    {
+      "name": "mbl_fl",
+      "type": "float",
+      "min_interval_ms": 0,
+      "enabled_by_default": false
+    },
+    {
+      "name": "mbl_hl",
+      "type": "float",
+      "min_interval_ms": 0,
+      "enabled_by_default": false
+    },
+    {
+      "name": "mbl_rl",
+      "type": "float",
+      "min_interval_ms": 0,
+      "enabled_by_default": false
+    },
+    {
+      "name": "mmu_comm",
+      "type": "string",
+      "min_interval_ms": 0,
+      "enabled_by_default": false
+    },
+    {
+      "name": "mmu_unl_fs_trg_dist",
+      "type": "float",
+      "min_interval_ms": 100,
+      "enabled_by_default": false
+    },
+    {
+      "name": "modbus_reqfail",
+      "type": "event",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "net_lat",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "nozzle_pwm",
+      "type": "integer",
+      "min_interval_ms": 1000,
+      "enabled_by_default": false
+    },
+    {
+      "name": "oc_inp",
+      "type": "integer",
+      "min_interval_ms": 1011,
+      "enabled_by_default": true
+    },
+    {
+      "name": "oc_nozz",
+      "type": "integer",
+      "min_interval_ms": 1010,
+      "enabled_by_default": true
+    },
+    {
+      "name": "phxy_home",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "phxy_meas",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "phxy_orig",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "phxy_probe",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "phxy_sens",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "plan_cnt",
+      "type": "integer",
+      "min_interval_ms": 100,
+      "enabled_by_default": false
+    },
+    {
+      "name": "plan_min",
+      "type": "integer",
+      "min_interval_ms": 100,
+      "enabled_by_default": false
+    },
+    {
+      "name": "plan_unopt",
+      "type": "integer",
+      "min_interval_ms": 100,
+      "enabled_by_default": false
+    },
+    {
+      "name": "points_dropped",
+      "type": "integer",
+      "min_interval_ms": 1000,
+      "enabled_by_default": true
+    },
+    {
+      "name": "pos_x",
+      "type": "float",
+      "min_interval_ms": 11,
+      "enabled_by_default": false
+    },
+    {
+      "name": "pos_y",
+      "type": "float",
+      "min_interval_ms": 11,
+      "enabled_by_default": false
+    },
+    {
+      "name": "pos_z",
+      "type": "float",
+      "min_interval_ms": 11,
+      "enabled_by_default": false
+    },
+    {
+      "name": "power_panic",
+      "type": "event",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "print_fan_act",
+      "type": "integer",
+      "min_interval_ms": 1000,
+      "enabled_by_default": false
+    },
+    {
+      "name": "print_filename",
+      "type": "string",
+      "min_interval_ms": 5000,
+      "enabled_by_default": true
+    },
+    {
+      "name": "probe_analysis",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "probe_angle",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "probe_load_line",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "probe_start",
+      "type": "event",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "probe_window",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": false
+    },
+    {
+      "name": "probe_z",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": false
+    },
+    {
+      "name": "probe_z_diff",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": false
+    },
+    {
+      "name": "ps_spd_chng",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": false
+    },
+    {
+      "name": "ps_stall",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": false
+    },
+    {
+      "name": "rx_ring",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "rxd_eth",
+      "type": "custom",
+      "min_interval_ms": 1000,
+      "enabled_by_default": true
+    },
+    {
+      "name": "rxd_tcp",
+      "type": "custom",
+      "min_interval_ms": 1000,
+      "enabled_by_default": true
+    },
+    {
+      "name": "sdpos",
+      "type": "integer",
+      "min_interval_ms": 100,
+      "enabled_by_default": true
+    },
+    {
+      "name": "side_fsensor",
+      "type": "custom",
+      "min_interval_ms": 49,
+      "enabled_by_default": false
+    },
+    {
+      "name": "stack",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "store_bytes",
+      "type": "integer",
+      "min_interval_ms": 5051,
+      "enabled_by_default": true
+    },
+    {
+      "name": "store_id",
+      "type": "integer",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "store_items",
+      "type": "integer",
+      "min_interval_ms": 5051,
+      "enabled_by_default": true
+    },
+    {
+      "name": "store_migration",
+      "type": "integer",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "store_migration_ms",
+      "type": "integer",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "store_migrations",
+      "type": "integer",
+      "min_interval_ms": 5051,
+      "enabled_by_default": true
+    },
+    {
+      "name": "stp_stall",
+      "type": "integer",
+      "min_interval_ms": 100,
+      "enabled_by_default": true
+    },
+    {
+      "name": "task_cpu",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "tcpip_blk",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "temp_bed",
+      "type": "float",
+      "min_interval_ms": 2023,
+      "enabled_by_default": false
+    },
+    {
+      "name": "temp_brd",
+      "type": "float",
+      "min_interval_ms": 991,
+      "enabled_by_default": false
+    },
+    {
+      "name": "temp_hbr",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": false
+    },
+    {
+      "name": "temp_mcu",
+      "type": "integer",
+      "min_interval_ms": 0,
+      "enabled_by_default": false
+    },
+    {
+      "name": "temp_noz",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": false
+    },
+    {
+      "name": "tk_accel",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": false
+    },
+    {
+      "name": "tmc_read",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "tmc_write",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "touch_evt",
+      "type": "string",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "touch_pos",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "ttemp_bed",
+      "type": "integer",
+      "min_interval_ms": 1000,
+      "enabled_by_default": false
+    },
+    {
+      "name": "ttemp_noz",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": false
+    },
+    {
+      "name": "upx",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "upx2",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "upx_f",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "upx_g",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "upx_n",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "upx_t",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "upx_u",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "upx_v",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "usb_io",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "usb_io2",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "usb_io3",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "xbe_fan",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": false
+    }
+  ]
+}
