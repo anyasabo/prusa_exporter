@@ -3,27 +3,37 @@ package config
 import (
 	"os"
 	"strings"
+	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v3"
 )
 
+// DefaultUDPSeriesTTL is the default of ExporterConfig.UDPSeriesTTL.
+const DefaultUDPSeriesTTL = 10 * time.Minute
+
 // Config struct for the configuration file prusa.yml
 type Config struct {
-	Exporter struct {
-		ScrapeTimeout int    `yaml:"scrape_timeout"`
-		LogLevel      string `yaml:"log_level"`
-		IPOverride    string
-		AllMetricsUDP bool
-		ExtraMetrics  []string
-		LokiPushURL   string
-	} `yaml:"exporter"`
-	Printers  []Printers `yaml:"printers"`
+	Exporter  ExporterConfig `yaml:"exporter"`
+	Printers  []Printers     `yaml:"printers"`
 	PrusaLink struct {
 		CommonLabels   []string `yaml:"common_labels"`
 		DisableMetrics []string `yaml:"disable_metrics"`
 	} `yaml:"prusalink"`
+}
+
+// ExporterConfig is the "exporter" section of prusa.yml.
+type ExporterConfig struct {
+	ScrapeTimeout int    `yaml:"scrape_timeout"`
+	LogLevel      string `yaml:"log_level"`
+	IPOverride    string
+	AllMetricsUDP bool
+	ExtraMetrics  []string
+	LokiPushURL   string
+	// UDPSeriesTTL is the time after which a UDP gauge or info series without a new
+	// point goes away. Counters do not expire. Zero or less means DefaultUDPSeriesTTL.
+	UDPSeriesTTL time.Duration `yaml:"udp_series_ttl"`
 }
 
 // Printers struct containing the printer configuration
@@ -51,6 +61,9 @@ func LoadConfig(path string, prusaLinkScrapeTimeout int, udpIPOverride string, u
 		return config, err
 	}
 	config.Exporter.ScrapeTimeout = prusaLinkScrapeTimeout
+	if config.Exporter.UDPSeriesTTL <= 0 {
+		config.Exporter.UDPSeriesTTL = DefaultUDPSeriesTTL
+	}
 	if udpIPOverride != "" {
 		config.Exporter.IPOverride = udpIPOverride
 		log.Info().Msgf("Overriding IP address for UDP metrics: %s", udpIPOverride)

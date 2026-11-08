@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/rs/zerolog"
 )
@@ -166,6 +167,32 @@ printers:
 				if p2.Type != "XL" {
 					t.Errorf("Printer 2 Type = %s, expected XL", p2.Type)
 				}
+			}
+		})
+	}
+}
+
+func TestLoadConfigUDPSeriesTTL(t *testing.T) {
+	tests := []struct {
+		name string
+		yaml string
+		want time.Duration
+	}{
+		{"default", "printers: []\n", DefaultUDPSeriesTTL},
+		{"set", "exporter:\n  udp_series_ttl: 90s\nprinters: []\n", 90 * time.Second},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "prusa.yml")
+			if err := os.WriteFile(path, []byte(tt.yaml), 0644); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := LoadConfig(path, 10, "", false, "", "", false)
+			if err != nil {
+				t.Fatalf("LoadConfig() error = %v", err)
+			}
+			if cfg.Exporter.UDPSeriesTTL != tt.want {
+				t.Errorf("UDPSeriesTTL = %v, want %v", cfg.Exporter.UDPSeriesTTL, tt.want)
 			}
 		})
 	}

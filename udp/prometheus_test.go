@@ -67,7 +67,7 @@ func sampleValue(typ dto.MetricType, m *dto.Metric) float64 {
 func newTestRegistry(t *testing.T) *prometheus.Registry {
 	t.Helper()
 	reg := prometheus.NewRegistry()
-	Init(reg)
+	Init(reg, Options{SeriesTTL: 10 * time.Minute})
 	return reg
 }
 
@@ -267,6 +267,55 @@ func TestProcessErrorPoints(t *testing.T) {
 	}
 }
 
+// A gauge or info series without a new point in the TTL goes away. A counter stays.
+func TestSeriesTTL(t *testing.T) {
+	reg := newTestRegistry(t)
+	start := time.Now()
+	now := start
+	collector.now = func() time.Time { return now }
+
+	record := func(line, fwName string) {
+		collector.recordPoint(mustParse(t, line), fwName, now)
+	}
+	record("prusa_temp_bed,printer_mac=ABC123 v=60.0 0", "temp_bed")
+	record(`prusa_fw_version,printer_mac=ABC123 v="6.4.0" 0`, "fw_version")
+	record("prusa_crash_repeated,printer_mac=ABC123 v=T 0", "crash_repeated")
+	record("prusa_temp_noz,printer_mac=ABC123 v=215.0 0", "temp_noz")
+
+	// 9 minutes later, only temp_noz gets a new point.
+	now = start.Add(9 * time.Minute)
+	record("prusa_temp_noz,printer_mac=ABC123 v=216.0 0", "temp_noz")
+	if got := len(gatherSamples(t, reg)); got != 4 {
+		t.Errorf("after 9 min: got %d series, want 4", got)
+	}
+
+	// 11 minutes after the start, temp_bed and fw_version are older than the TTL.
+	now = start.Add(11 * time.Minute)
+	samples := gatherSamples(t, reg)
+	for _, k := range []string{
+		"prusa_temp_bed{printer_mac=ABC123}",
+		"prusa_fw_version_info{printer_mac=ABC123,value=6.4.0}",
+	} {
+		if _, ok := samples[k]; ok {
+			t.Errorf("series %s did not expire", k)
+		}
+	}
+	for _, k := range []string{
+		"prusa_temp_noz{printer_mac=ABC123}",
+		"prusa_crash_repeated_total{printer_mac=ABC123}",
+	} {
+		if _, ok := samples[k]; !ok {
+			t.Errorf("series %s expired, want it to stay. All: %v", k, samples)
+		}
+	}
+
+	// A new point makes the series again.
+	record("prusa_temp_bed,printer_mac=ABC123 v=61.0 0", "temp_bed")
+	if got := gatherSamples(t, reg)["prusa_temp_bed{printer_mac=ABC123}"]; got != 61 {
+		t.Errorf("prusa_temp_bed = %v, want 61", got)
+	}
+}
+
 func TestConcurrentRecordPoint(t *testing.T) {
 	reg := newTestRegistry(t)
 
@@ -319,7 +368,7 @@ func TestToFloat64(t *testing.T) {
 }
 
 func BenchmarkRecordPoint(b *testing.B) {
-	Init(prometheus.NewRegistry())
+	Init(prometheus.NewRegistry(), Options{})
 
 	p := point{
 		Measurement: "benchmark_metric",

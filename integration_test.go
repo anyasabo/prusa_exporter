@@ -116,14 +116,7 @@ func TestIntegrationMockPrinterAPI(t *testing.T) {
 
 	// Test that we can create a configuration with the mock server
 	cfg := config.Config{
-		Exporter: struct {
-			ScrapeTimeout int    `yaml:"scrape_timeout"`
-			LogLevel      string `yaml:"log_level"`
-			IPOverride    string
-			AllMetricsUDP bool
-			ExtraMetrics  []string
-			LokiPushURL   string
-		}{
+		Exporter: config.ExporterConfig{
 			ScrapeTimeout: 5,
 		},
 		Printers: []config.Printers{
@@ -273,14 +266,7 @@ func TestIntegrationUDPMetricsEnabler(t *testing.T) {
 
 	// Set up a minimal configuration for the enabler
 	originalConfig := config.Config{
-		Exporter: struct {
-			ScrapeTimeout int    `yaml:"scrape_timeout"`
-			LogLevel      string `yaml:"log_level"`
-			IPOverride    string
-			AllMetricsUDP bool
-			ExtraMetrics  []string
-			LokiPushURL   string
-		}{
+		Exporter: config.ExporterConfig{
 			ScrapeTimeout: 5,
 			IPOverride:    "192.168.1.50",
 		},

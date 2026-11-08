@@ -72,7 +72,7 @@ func Run() {
 		log.Warn().Msg("Not enabling UDP metrics, because gcode generation is disabled")
 	}
 	// Init must run before the listener, because the listener writes to the UDP registry.
-	udp.Init(udpRegistry)
+	udp.Init(udpRegistry, udp.Options{SeriesTTL: config.Exporter.UDPSeriesTTL})
 
 	// starting syslog server
 

@@ -248,14 +248,7 @@ func TestAccessPrinterEndpoint(t *testing.T) {
 	defer func() { configuration = originalConfig }()
 
 	configuration = config.Config{
-		Exporter: struct {
-			ScrapeTimeout int    `yaml:"scrape_timeout"`
-			LogLevel      string `yaml:"log_level"`
-			IPOverride    string
-			AllMetricsUDP bool
-			ExtraMetrics  []string
-			LokiPushURL   string
-		}{
+		Exporter: config.ExporterConfig{
 			ScrapeTimeout: 5,
 		},
 	}
@@ -384,14 +377,7 @@ func TestHTTPTimeouts(t *testing.T) {
 	defer func() { configuration = originalConfig }()
 
 	configuration = config.Config{
-		Exporter: struct {
-			ScrapeTimeout int    `yaml:"scrape_timeout"`
-			LogLevel      string `yaml:"log_level"`
-			IPOverride    string
-			AllMetricsUDP bool
-			ExtraMetrics  []string
-			LokiPushURL   string
-		}{
+		Exporter: config.ExporterConfig{
 			ScrapeTimeout: 1, // 1 second timeout
 		},
 	}

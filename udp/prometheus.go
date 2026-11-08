@@ -32,11 +32,18 @@ var (
 	collector *udpCollector
 )
 
+// Options are the settings of the UDP metrics.
+type Options struct {
+	// SeriesTTL is the time after which a gauge or info series without a new point
+	// goes away. Counters do not expire. Zero or less disables the expiry.
+	SeriesTTL time.Duration
+}
+
 // Init initializes the Prometheus udp registry.
 // Call Init before MetricsListener.
-func Init(udpMainRegistry *prometheus.Registry) {
+func Init(udpMainRegistry *prometheus.Registry, opts Options) {
 	udpRegistry = udpMainRegistry
-	collector = newUDPCollector()
+	collector = newUDPCollector(opts)
 	lastPush.Reset()
 	pointErrors.Reset()
 
@@ -89,13 +96,18 @@ type udpCollector struct {
 	families map[string]*family
 	series   map[string]*series
 	warned   map[string]bool
+	ttl      time.Duration
+	// now returns the current time. Tests replace it.
+	now func() time.Time
 }
 
-func newUDPCollector() *udpCollector {
+func newUDPCollector(opts Options) *udpCollector {
 	return &udpCollector{
 		families: make(map[string]*family),
 		series:   make(map[string]*series),
 		warned:   make(map[string]bool),
+		ttl:      opts.SeriesTTL,
+		now:      time.Now,
 	}
 }
 
@@ -103,11 +115,12 @@ func newUDPCollector() *udpCollector {
 // names of a metric can change from one series to the next.
 func (c *udpCollector) Describe(chan<- *prometheus.Desc) {}
 
-// Collect implements prometheus.Collector.
+// Collect implements prometheus.Collector. It deletes the expired series first.
 func (c *udpCollector) Collect(ch chan<- prometheus.Metric) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	c.expire()
 	for _, s := range c.series {
 		m, err := prometheus.NewConstMetric(s.desc, s.family.kind.valueType(), s.value, s.labelValues...)
 		if err != nil {
@@ -115,6 +128,21 @@ func (c *udpCollector) Collect(ch chan<- prometheus.Metric) {
 			continue
 		}
 		ch <- m
+	}
+}
+
+// expire deletes the gauge and info series that had no point in the TTL. A counter
+// does not expire: if it went away and came back, the reset would hide the count.
+// The caller holds c.mu.
+func (c *udpCollector) expire() {
+	if c.ttl <= 0 {
+		return
+	}
+	cutoff := c.now().Add(-c.ttl)
+	for key, s := range c.series {
+		if s.family.kind != kindCounter && s.updated.Before(cutoff) {
+			delete(c.series, key)
+		}
 	}
 }
 
