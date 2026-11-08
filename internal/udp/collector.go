@@ -15,8 +15,11 @@ import (
 )
 
 const (
-	lastPushName    = "prusa_last_push_timestamp_seconds"
-	pointErrorsName = "prusa_udp_point_errors_total"
+	lastPushName       = "prusa_last_push_timestamp_seconds"
+	pointErrorsName    = "prusa_udp_point_errors_total"
+	pointErrorsAllName = "prusa_udp_point_errors_all_total"
+	pointsName         = "prusa_udp_points_total"
+	packetsName        = "prusa_udp_packets_total"
 )
 
 var (
@@ -26,11 +29,24 @@ var (
 	pointErrorsDesc = prometheus.NewDesc(pointErrorsName,
 		"Number of error points (error=\"...\") from the printer firmware, by metric. The exporter drops these points.",
 		[]string{"metric", "printer_mac", "printer_address"}, nil)
+	// The first packet of a printer makes the counters below at 0, so that a dashboard
+	// can tell "no points" from "no series".
+	pointErrorsAllDesc = prometheus.NewDesc(pointErrorsAllName,
+		"Number of error points (error=\"...\") from the printer firmware, all metrics. The exporter drops these points. "+pointErrorsName+" has the count for each metric.",
+		[]string{"printer_mac", "printer_address"}, nil)
+	pointsDesc = prometheus.NewDesc(pointsName,
+		"Number of points from the printer firmware that the exporter parsed, error points and event points included.",
+		[]string{"printer_mac", "printer_address"}, nil)
+	packetsDesc = prometheus.NewDesc(packetsName,
+		"Number of UDP datagrams from the printer that the exporter received.",
+		[]string{"printer_mac", "printer_address"}, nil)
 )
 
 // reservedNames are the metrics of the collector that are not firmware metrics.
 // A firmware metric with one of these names would make each scrape fail.
-var reservedNames = map[string]bool{lastPushName: true, pointErrorsName: true}
+var reservedNames = map[string]bool{
+	lastPushName: true, pointErrorsName: true, pointErrorsAllName: true, pointsName: true, packetsName: true,
+}
 
 type metricKind int
 
@@ -70,9 +86,19 @@ type series struct {
 	sampled time.Time
 	// info is the string of a kindInfo series.
 	info string
+	// printerCount is true after the first count point (n=<int>) of an event counter.
+	// Then the value is the count of the printer, and v=T points do not change it.
+	printerCount bool
 }
 
 type printerKey struct{ mac, address string }
+
+// printerStats are the per-printer counters.
+type printerStats struct {
+	lastPush        time.Time
+	packets, points float64
+	errors          float64
+}
 
 type errorKey struct {
 	metric string
@@ -90,6 +116,10 @@ type Options struct {
 	MaxSeries int
 	// SampleTimestamps adds the estimated time of the last point to each sample.
 	SampleTimestamps bool
+	// EventMetrics are the firmware names (without the prefix) of the event metrics.
+	// The first packet of a printer makes the counter of each event at 0. An event
+	// that is not in the list gets its counter with its first point.
+	EventMetrics []string
 }
 
 // Collector keeps the last value of each UDP series and exposes them. It is an
@@ -103,7 +133,7 @@ type Collector struct {
 	mu          sync.Mutex
 	families    map[string]*family
 	series      map[string]*series
-	lastPush    map[printerKey]time.Time
+	printers    map[printerKey]*printerStats
 	pointErrors map[errorKey]float64
 	warned      map[string]bool
 	// now returns the current time. Tests replace it.
@@ -117,7 +147,7 @@ func NewCollector(opts Options, logger *slog.Logger, reg prometheus.Registerer) 
 		logger:      logger,
 		families:    make(map[string]*family),
 		series:      make(map[string]*series),
-		lastPush:    make(map[printerKey]time.Time),
+		printers:    make(map[printerKey]*printerStats),
 		pointErrors: make(map[errorKey]float64),
 		warned:      make(map[string]bool),
 		now:         time.Now,
@@ -141,8 +171,11 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 	defer c.mu.Unlock()
 
 	c.expire()
-	for k, t := range c.lastPush {
-		ch <- prometheus.MustNewConstMetric(lastPushDesc, prometheus.GaugeValue, float64(t.UnixNano())/1e9, k.mac, k.address)
+	for k, st := range c.printers {
+		ch <- prometheus.MustNewConstMetric(lastPushDesc, prometheus.GaugeValue, float64(st.lastPush.UnixNano())/1e9, k.mac, k.address)
+		ch <- prometheus.MustNewConstMetric(packetsDesc, prometheus.CounterValue, st.packets, k.mac, k.address)
+		ch <- prometheus.MustNewConstMetric(pointsDesc, prometheus.CounterValue, st.points, k.mac, k.address)
+		ch <- prometheus.MustNewConstMetric(pointErrorsAllDesc, prometheus.CounterValue, st.errors, k.mac, k.address)
 	}
 	for k, n := range c.pointErrors {
 		ch <- prometheus.MustNewConstMetric(pointErrorsDesc, prometheus.CounterValue, n, k.metric, k.mac, k.address)
@@ -244,11 +277,15 @@ func (c *Collector) record(mac, address string, points []*point, received time.T
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	pk := printerKey{mac, address}
-	c.lastPush[pk] = received
+	st := c.printer(pk)
+	st.lastPush = received
+	st.packets++
+	st.points += float64(len(points))
 	for _, p := range points {
 		if msg, ok := errorMessage(p); ok {
 			// The firmware sends "name error=\"...\"" when it cannot record a value.
 			c.pointErrors[errorKey{p.Name, pk}]++
+			st.errors++
 			c.metrics.points.WithLabelValues(resultErrorPoint).Inc()
 			c.logger.Debug("Error point from the printer", "printer_mac", mac, "metric", p.Name, "error", msg)
 			continue
@@ -264,6 +301,32 @@ func (c *Collector) record(mac, address string, points []*point, received time.T
 	return stored, dropped
 }
 
+// printer returns the stats of the printer. The first time, it makes the counter of
+// each known event at 0. The caller holds c.mu.
+func (c *Collector) printer(pk printerKey) *printerStats {
+	if st, ok := c.printers[pk]; ok {
+		return st
+	}
+	st := &printerStats{}
+	c.printers[pk] = st
+	labels := map[string]string{"printer_mac": pk.mac, "printer_address": pk.address}
+	for _, event := range c.opts.EventMetrics {
+		name := c.opts.Prefix + event + "_total"
+		c.getSeries(seriesKey(name, labels), name, kindCounter, counterHelp(event, "v"), labels)
+	}
+	return st
+}
+
+// isEvent tells if the metric is an event metric: it is in the list of known events,
+// or a v=T point made its counter. The caller holds c.mu.
+func (c *Collector) isEvent(fwName string) bool {
+	if slices.Contains(c.opts.EventMetrics, fwName) {
+		return true
+	}
+	fam, ok := c.families[c.opts.Prefix+fwName+"_total"]
+	return ok && fam.kind == kindCounter
+}
+
 // recordPoint stores the fields of one point. It returns false if it dropped a field.
 // The caller holds c.mu.
 func (c *Collector) recordPoint(p *point, received time.Time) bool {
@@ -272,6 +335,19 @@ func (c *Collector) recordPoint(p *point, received time.Time) bool {
 		metricName := c.opts.Prefix + p.Name
 		if key != "v" && key != "value" {
 			metricName += "_" + key
+		}
+		if n, isInt := value.(int64); isInt && key == "n" && c.isEvent(p.Name) {
+			// The firmware sends the count of events since boot as n=<int>. This value
+			// replaces the count of the v=T points. A decrease is a printer restart.
+			name := c.opts.Prefix + p.Name + "_total"
+			s := c.getSeries(seriesKey(name, p.Tags), name, kindCounter, counterHelp(p.Name, "v"), p.Tags)
+			if s == nil {
+				ok = false
+				continue
+			}
+			s.value, s.printerCount = float64(n), true
+			s.updated, s.sampled = received, p.Time
+			continue
 		}
 		switch v := value.(type) {
 		case bool:
@@ -283,6 +359,9 @@ func (c *Collector) recordPoint(p *point, received time.Time) bool {
 			s := c.getSeries(seriesKey(name, p.Tags), name, kindCounter, counterHelp(p.Name, key), p.Tags)
 			if s == nil {
 				ok = false
+				continue
+			}
+			if s.printerCount {
 				continue
 			}
 			s.value++
@@ -335,7 +414,7 @@ func infoHelp(fwName, field string) string {
 }
 
 func counterHelp(fwName, field string) string {
-	return "Number of event points of " + fieldDesc(fwName, field) + " from the printer firmware, since the exporter started."
+	return "Number of events of " + fieldDesc(fwName, field) + " from the printer firmware. If the firmware sends n=<count>, the value is the count of the printer since boot. Else it is the number of event points since the exporter started."
 }
 
 func gaugeHelp(fwName, field string, value any) string {

@@ -22,6 +22,10 @@ const (
 	DefaultPrusaLinkScrapeBudget = 8 * time.Second
 )
 
+// DefaultUDPEventMetrics is the default of Exporter.UDPEventMetrics. These are all
+// METRIC_VALUE_EVENT metrics of the Prusa Buddy firmware.
+var DefaultUDPEventMetrics = []string{"app_start", "crash_repeated", "maintask_loop", "modbus_reqfail", "power_panic", "probe_start"}
+
 // LabelNames are the values that PrusaLink.CommonLabels can have.
 var LabelNames = []string{"printer_address", "printer_model", "printer_name", "printer_job_name", "printer_job_path"}
 
@@ -47,6 +51,10 @@ type Exporter struct {
 	// UDPMaxSeries is the maximum number of UDP series. The exporter drops the points
 	// of new series above this number.
 	UDPMaxSeries int `yaml:"udp_max_series"`
+	// UDPEventMetrics are the firmware names of the UDP event metrics (v=T). The first
+	// packet of a printer makes prusa_<name>_total at 0 for each name. If the key is
+	// not set, the list is DefaultUDPEventMetrics. An empty list disables it.
+	UDPEventMetrics []string `yaml:"udp_event_metrics"`
 	// PrusaLinkScrapeBudget is the maximum time for all PrusaLink requests of one
 	// printer in one scrape. The scrape timeout of the scraper can make it shorter.
 	PrusaLinkScrapeBudget time.Duration `yaml:"prusalink_scrape_budget"`
@@ -110,6 +118,9 @@ func (c *Config) setDefaults() {
 	}
 	if c.Exporter.PrusaLinkScrapeBudget <= 0 {
 		c.Exporter.PrusaLinkScrapeBudget = DefaultPrusaLinkScrapeBudget
+	}
+	if c.Exporter.UDPEventMetrics == nil {
+		c.Exporter.UDPEventMetrics = slices.Clone(DefaultUDPEventMetrics)
 	}
 	if len(c.PrusaLink.CommonLabels) == 0 {
 		c.PrusaLink.CommonLabels = slices.Clone(DefaultCommonLabels)

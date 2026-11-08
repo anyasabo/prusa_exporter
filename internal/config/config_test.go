@@ -24,6 +24,7 @@ func TestParse(t *testing.T) {
 				Exporter: Exporter{
 					UDPSeriesTTL:          DefaultUDPSeriesTTL,
 					UDPMaxSeries:          DefaultUDPMaxSeries,
+					UDPEventMetrics:       DefaultUDPEventMetrics,
 					PrusaLinkScrapeBudget: DefaultPrusaLinkScrapeBudget,
 				},
 				Printers:  []Printer{{Address: "10.0.0.1", APIKey: "k"}},
@@ -37,6 +38,7 @@ exporter:
   udp_series_ttl: 90s
   udp_sample_timestamps: true
   udp_max_series: 50
+  udp_event_metrics: []
   prusalink_scrape_budget: 3s
 printers:
   - address: printer.lan:8080
@@ -53,6 +55,7 @@ prusalink:
 					UDPSeriesTTL:          90 * time.Second,
 					UDPSampleTimestamps:   true,
 					UDPMaxSeries:          50,
+					UDPEventMetrics:       []string{},
 					PrusaLinkScrapeBudget: 3 * time.Second,
 				},
 				Printers: []Printer{{Address: "printer.lan:8080", Username: "maker", Password: "secret", Name: "MK4", Type: "MK4S"}},
@@ -69,6 +72,7 @@ prusalink:
 				Exporter: Exporter{
 					UDPSeriesTTL:          DefaultUDPSeriesTTL,
 					UDPMaxSeries:          DefaultUDPMaxSeries,
+					UDPEventMetrics:       DefaultUDPEventMetrics,
 					PrusaLinkScrapeBudget: DefaultPrusaLinkScrapeBudget,
 				},
 				PrusaLink: PrusaLink{CommonLabels: DefaultCommonLabels},
@@ -98,6 +102,17 @@ prusalink:
 				t.Errorf("Parse() =\n%+v\nwant\n%+v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestUDPEventMetrics(t *testing.T) {
+	t.Parallel()
+	c, err := Parse([]byte("exporter:\n  udp_event_metrics: [probe_start, my_event]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := c.Exporter.UDPEventMetrics, []string{"probe_start", "my_event"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("UDPEventMetrics = %v, want %v", got, want)
 	}
 }
 

@@ -70,12 +70,21 @@ prusa_fw_version_info{printer_address="192.168.1.10",printer_mac="AA:BB",value="
 # HELP prusa_last_push_timestamp_seconds Time of the last UDP message from the printer.
 # TYPE prusa_last_push_timestamp_seconds gauge
 prusa_last_push_timestamp_seconds{printer_address="192.168.1.10",printer_mac="AA:BB"} 1.7e+09
-# HELP prusa_probe_start_total Number of event points of UDP metric "probe_start" from the printer firmware, since the exporter started.
+# HELP prusa_probe_start_total Number of events of UDP metric "probe_start" from the printer firmware. If the firmware sends n=<count>, the value is the count of the printer since boot. Else it is the number of event points since the exporter started.
 # TYPE prusa_probe_start_total counter
 prusa_probe_start_total{printer_address="192.168.1.10",printer_mac="AA:BB"} 2
 # HELP prusa_temp_noz UDP metric "temp_noz" from the printer firmware, float value.
 # TYPE prusa_temp_noz gauge
 prusa_temp_noz{printer_address="192.168.1.10",printer_mac="AA:BB"} 215.5
+# HELP prusa_udp_packets_total Number of UDP datagrams from the printer that the exporter received.
+# TYPE prusa_udp_packets_total counter
+prusa_udp_packets_total{printer_address="192.168.1.10",printer_mac="AA:BB"} 1
+# HELP prusa_udp_point_errors_all_total Number of error points (error="...") from the printer firmware, all metrics. The exporter drops these points. prusa_udp_point_errors_total has the count for each metric.
+# TYPE prusa_udp_point_errors_all_total counter
+prusa_udp_point_errors_all_total{printer_address="192.168.1.10",printer_mac="AA:BB"} 1
+# HELP prusa_udp_points_total Number of points from the printer firmware that the exporter parsed, error points and event points included.
+# TYPE prusa_udp_points_total counter
+prusa_udp_points_total{printer_address="192.168.1.10",printer_mac="AA:BB"} 7
 # HELP prusa_udp_point_errors_total Number of error points (error="...") from the printer firmware, by metric. The exporter drops these points.
 # TYPE prusa_udp_point_errors_total counter
 prusa_udp_point_errors_total{metric="tmc_read",printer_address="192.168.1.10",printer_mac="AA:BB"} 1
