@@ -1,2 +1,4 @@
-bin/
+dist/
+coverage.out
 prusa.yml
+/prusa_exporter

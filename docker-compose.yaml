@@ -26,29 +26,28 @@ services:
       - grafana_data:/var/lib/grafana
 
   exporter:
-    image: pubeldev/prusa_exporter:2.0.0
+    image: ghcr.io/anyasabo/prusa_exporter:latest
     container_name: exporter
     restart: unless-stopped
     volumes:
       - type: bind
         source: ./docs/config/prusa.yml
-        target: /app/prusa.yml
+        target: /etc/prusa_exporter/prusa.yml
+        read_only: true
     ports:
       - "10009:10009"
-      - 8514:8514/udp
-    command: 
-      - "--config.file=/app/prusa.yml"
-      - "--log.level=info"
-      - "--prusalink.scrape-timeout=5"
-      - "--udp.ip-override=${HOST_IP}"
-      - "--udp.gcode-enabled"
-      - "--loki.enabled"
+      - "8514:8514/udp"
+    command:
+      - "--config.file=/etc/prusa_exporter/prusa.yml"
+      # In a container, the exporter cannot see the address of the host. The printer
+      # sends its UDP metrics to this address. Example: HOST_IP=192.168.1.5 docker compose up
+      - "--udp.ip-override=${HOST_IP:?set HOST_IP to the LAN address of this host}"
       - "--loki.push-url=http://loki:3100/loki/api/v1/push"
     depends_on:
       - prometheus
     networks:
       - pubel
- 
+
   prometheus:
     image: prom/prometheus:v3.7.3
     container_name: prometheus

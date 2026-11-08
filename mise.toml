@@ -1,6 +1,59 @@
-# Tool versions for local development and CI. Renovate keeps them current.
-# Install: `mise install`. List the tasks: `mise tasks`.
+# Tool versions and tasks for local development and CI. CI runs the same tasks.
+# Install the tools: `mise install`. List the tasks: `mise tasks`.
+# Renovate keeps the versions current.
+
 [tools]
 go = "1.27.3"
 golangci-lint = "2.15.0"
 goreleaser = "2.20.0"
+# goreleaser uses syft for the SBOMs.
+syft = "1.57.0"
+actionlint = "1.7.12"
+zizmor = "1.32.0"
+"go:golang.org/x/vuln/cmd/govulncheck" = "1.9.0"
+
+[tasks.fmt]
+description = "Format the Go code"
+run = "golangci-lint fmt ./..."
+
+[tasks.lint]
+description = "Run the linters and check that go.mod is tidy"
+run = [
+  "golangci-lint run ./...",
+  "go mod tidy -diff",
+  "goreleaser check --quiet",
+  "actionlint",
+  "zizmor --quiet .github",
+]
+
+[tasks.vulncheck]
+description = "Check the dependencies for known vulnerabilities"
+run = "govulncheck ./..."
+
+[tasks.test]
+description = "Run the tests with the race detector and coverage"
+run = "go test -race -shuffle=on -coverprofile=coverage.out ./..."
+
+[tasks.fuzz]
+description = "Run each fuzz test for a short time (FUZZTIME, default 30s)"
+run = '''
+for f in FuzzParsePoint FuzzParseMessage; do
+  go test -run '^$' -fuzz "^$f\$" -fuzztime "${FUZZTIME:-30s}" -parallel 2 ./internal/udp
+done
+'''
+
+[tasks.ci]
+description = "Run all checks of CI"
+depends = ["lint", "test", "vulncheck"]
+
+[tasks.build]
+description = "Build the binary for this platform into dist/"
+run = "goreleaser build --snapshot --clean --single-target"
+
+[tasks.release-dry-run]
+description = "Build all binaries, checksums and SBOMs into dist/, with no publish and no image"
+run = "goreleaser release --snapshot --clean --skip=publish,ko"
+
+[tasks.run]
+description = "Run the exporter with ./prusa.yml"
+run = "go run . --config.file=prusa.yml"

@@ -1,0 +1,77 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# Release: push a tag "vX.Y.Z". CI runs `goreleaser release`.
+# Local build: `mise run build`. Local release dry run: `mise run release-dry-run`.
+version: 2
+
+project_name: prusa_exporter
+
+before:
+  hooks:
+    - go mod verify
+
+builds:
+  - id: prusa_exporter
+    main: .
+    binary: prusa_exporter
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/prometheus/common/version.Version={{ .Version }}
+      - -X github.com/prometheus/common/version.Revision={{ .FullCommit }}
+      - -X github.com/prometheus/common/version.Branch={{ .Branch }}
+      - -X github.com/prometheus/common/version.BuildDate={{ .CommitDate }}
+      - -X github.com/prometheus/common/version.BuildUser=goreleaser
+    # Reproducible builds: the file time is the commit time.
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    goos: [linux, darwin]
+    goarch: [amd64, arm64, arm, riscv64]
+    goarm: ["7"]
+    ignore:
+      - goos: darwin
+        goarch: arm
+      - goos: darwin
+        goarch: riscv64
+
+archives:
+  # Plain binaries. The homeserver deploy downloads prusa_exporter-linux-amd64.
+  - formats: [binary]
+    name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
+
+checksum:
+  name_template: checksums.txt
+
+sboms:
+  - artifacts: binary
+    documents:
+      - "{{ .Binary }}-{{ .Os }}-{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}.sbom.spdx.json"
+
+kos:
+  - build: prusa_exporter
+    main: .
+    # Renovate updates the digest.
+    base_image: gcr.io/distroless/static-debian13:nonroot@sha256:25ac8f0c3b2334a9eb05452266bd4697864a8c8ef0ef71e5e6480d7f92868329
+    repositories:
+      - ghcr.io/anyasabo/prusa_exporter
+    platforms: [linux/amd64, linux/arm64, linux/arm/v7]
+    bare: true
+    tags:
+      - "{{ .Version }}"
+      - '{{ if not .Prerelease }}latest{{ end }}'
+    creation_time: "{{ .CommitTimestamp }}"
+    ko_data_creation_time: "{{ .CommitTimestamp }}"
+    sbom: spdx
+    labels:
+      org.opencontainers.image.source: https://github.com/anyasabo/prusa_exporter
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.licenses: AGPL-3.0-only
+
+release:
+  prerelease: auto
+
+changelog:
+  use: github
+  sort: asc

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:best-practices",
+    ":semanticCommitsDisabled"
+  ],
+  "postUpdateOptions": ["gomodTidy"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "The ko base image in .goreleaser.yaml",
+      "managerFilePatterns": ["/^\\.goreleaser\\.yaml$/"],
+      "matchStrings": ["base_image: (?<depName>[^:@\\s]+):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]+)"],
+      "datasourceTemplate": "docker"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Group the Go toolchain in go.mod with the version in mise.toml",
+      "matchPackageNames": ["go", "golang"],
+      "groupName": "Go toolchain"
+    },
+    {
+      "description": "Group the minor and patch updates of the Prometheus libraries",
+      "matchPackageNames": ["github.com/prometheus/**"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "Prometheus libraries"
+    }
+  ]
+}
