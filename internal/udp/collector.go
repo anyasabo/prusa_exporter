@@ -135,6 +135,10 @@ type Options struct {
 	// The first packet of a printer makes the counter of each event at 0. An event
 	// that is not in the list gets its counter with its first point.
 	EventMetrics []string
+	// CounterFields are the cumulative fields: a map from the firmware name to the
+	// field names ("v" for a metric without fields). Each one is a counter with the
+	// suffix "_total" and the value of the printer. The other numbers are gauges.
+	CounterFields map[string][]string
 }
 
 // Collector keeps the last value of each UDP series and exposes them. It is an
@@ -246,6 +250,8 @@ type helpSpec struct {
 	fwName  string
 	field   string
 	integer bool
+	// cumulative is a counter field of Options.CounterFields, not an event counter.
+	cumulative bool
 }
 
 func (h helpSpec) text() string {
@@ -257,6 +263,9 @@ func (h helpSpec) text() string {
 	case kindInfo:
 		return "String " + desc + " from the printer firmware. The label \"value\" holds the last string. The value is always 1."
 	case kindCounter:
+		if h.cumulative {
+			return "Cumulative " + desc + " from the printer firmware: the count of the printer since boot. A decrease is a printer restart."
+		}
 		return "Number of events of " + desc + " from the printer firmware. If the firmware sends n=<count>, the value is the count of the printer since boot. Else it is the number of event points since the exporter started."
 	default:
 		kind := "float"
@@ -460,6 +469,19 @@ func (c *Collector) recordPoint(p *point, received time.Time) bool {
 				ok = false
 			}
 		default:
+			if slices.Contains(c.opts.CounterFields[p.Name], f.key) {
+				// A cumulative firmware field: the printer sends its count since boot.
+				c.setName(p.Name, f.key, "_total")
+				c.setKey()
+				s := c.getSeries(helpSpec{kind: kindCounter, fwName: p.Name, field: f.key, cumulative: true}, tag{})
+				if s == nil {
+					ok = false
+					continue
+				}
+				s.value, s.printerCount = f.num, true
+				s.updated, s.sampled = received, p.Time
+				continue
+			}
 			c.setName(p.Name, f.key, "")
 			c.setKey()
 			s := c.getSeries(helpSpec{kind: kindGauge, fwName: p.Name, field: f.key, integer: f.kind == valueInt}, tag{})

@@ -80,6 +80,15 @@ An event metric has two sources for its count:
 1. Stock firmware sends one point `name v=T` for each event. The exporter counts these points from the time it starts. The rate limit of the firmware and lost UDP packets can drop events.
 2. At a fixed interval, a firmware can also send the count since boot as an integer field `n`: `probe_start n=5i <time>`. If the count is 0, it sends the count too. An event metric is in `udp_event_metrics`, or the exporter received a `v=T` point for it. For an event metric, `prusa_<name>_total` then shows the value of the printer. After the first `n` point of a printer, the exporter ignores the `v=T` points of that metric for that printer. At the switch, the counter can jump to the value of the printer. After a printer restart, the count goes down to 0. `rate()` and `increase()` see this as a counter reset. For a metric that is not an event metric, the field `n` stays the gauge `prusa_<name>_n`.
 
+### Cumulative fields
+
+Some firmware fields are counts since the printer started, for example `stp_stall` (the planner ran out of moves) or the field `t` of `task_cpu` (CPU ms of a task). The option `udp_counter_fields` of the `exporter:` section lists them: a map from the firmware name to its fields, with `v` for a metric without fields. Each one is a counter with the value of the printer:
+
+- `stp_stall v=5i` is `prusa_stp_stall_total 5`.
+- `task_cpu,n=IDLE c=230i,t=1000i` is `prusa_task_cpu_t_total{n="IDLE"} 1000` and the gauge `prusa_task_cpu_c{n="IDLE"} 230`.
+
+After a printer restart, the value goes down to 0, and `rate()` and `increase()` see a counter reset. These counters do not expire. If the option is not set, the exporter uses the list `DefaultUDPCounterFields` in `internal/config/config.go`. It has the counters of the Buddy firmware and of the fork `anyasabo/Prusa-Firmware-Buddy`. `TestFirmwareReference` checks each name and type against the firmware builds in `docs/firmware/`. `{}` makes all fields gauges, as before this option.
+
 ## Prusa Link Metrics
 
 **Prusa Link** is configured with [prusa.yml](docs/config/prusa.yml) where you need to fill - Settings -> Network -> PrusaLink

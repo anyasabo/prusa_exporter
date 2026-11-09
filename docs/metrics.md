@@ -35,7 +35,7 @@ One request to PrusaLink for each printer at each scrape. The labels `printer_ad
 
 ## UDP: `/metrics/udp`
 
-The fixed series. The firmware metrics are not in this list. A firmware metric `NAME` with a number is `prusa_NAME`. An event (`v=T`, or the count `n`) is `prusa_NAME_total`. A string is `prusa_NAME_info` with the label `value`. The events in `exporter.udp_event_metrics` start at 0.
+The fixed series. The firmware metrics are not in this list. A firmware metric `NAME` with a number is `prusa_NAME`. An event (`v=T`, or the count `n`) is `prusa_NAME_total`. A string is `prusa_NAME_info` with the label `value`. The events in `exporter.udp_event_metrics` start at 0. A field in `exporter.udp_counter_fields` is the counter `prusa_NAME_FIELD_total` (`prusa_NAME_total` for `v`).
 
 | Metric | Type | Labels | Description |
 | --- | --- | --- | --- |

@@ -1,6 +1,6 @@
 {
   "model": "coreonel",
-  "firmware": "9.0.0+17091.LOCAL (experiment branch, 76918075f)",
+  "firmware": "9.0.0+17131.LOCAL (branch metrics-defaults, 25fe7ff7c)",
   "metrics": [
     {
       "name": "adj_z",
@@ -41,8 +41,8 @@
     {
       "name": "chamber_ttemp",
       "type": "float",
-      "min_interval_ms": 1000,
-      "enabled_by_default": false
+      "min_interval_ms": 0,
+      "enabled_by_default": true
     },
     {
       "name": "cmdcnt",
@@ -207,15 +207,45 @@
       "enabled_by_default": false
     },
     {
+      "name": "gui_min",
+      "type": "integer",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "gui_prof",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "gui_prof2",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "gui_prof3",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
       "name": "hbr_fan_act",
       "type": "integer",
-      "min_interval_ms": 1000,
-      "enabled_by_default": false
+      "min_interval_ms": 0,
+      "enabled_by_default": true
     },
     {
       "name": "heap",
       "type": "custom",
       "min_interval_ms": 503,
+      "enabled_by_default": true
+    },
+    {
+      "name": "heap_min",
+      "type": "custom",
+      "min_interval_ms": 5000,
       "enabled_by_default": true
     },
     {
@@ -423,6 +453,18 @@
       "enabled_by_default": true
     },
     {
+      "name": "net_cnt",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "net_cnt2",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
       "name": "net_lat",
       "type": "custom",
       "min_interval_ms": 0,
@@ -432,7 +474,7 @@
       "name": "nozzle_pwm",
       "type": "integer",
       "min_interval_ms": 1000,
-      "enabled_by_default": false
+      "enabled_by_default": true
     },
     {
       "name": "oc_inp",
@@ -444,6 +486,24 @@
       "name": "oc_nozz",
       "type": "integer",
       "min_interval_ms": 1010,
+      "enabled_by_default": true
+    },
+    {
+      "name": "phstep_prof",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "phstep_prof2",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "phstep_prof3",
+      "type": "custom",
+      "min_interval_ms": 0,
       "enabled_by_default": true
     },
     {
@@ -479,8 +539,8 @@
     {
       "name": "plan_cnt",
       "type": "integer",
-      "min_interval_ms": 100,
-      "enabled_by_default": false
+      "min_interval_ms": 1000,
+      "enabled_by_default": true
     },
     {
       "name": "plan_min",
@@ -491,8 +551,8 @@
     {
       "name": "plan_unopt",
       "type": "integer",
-      "min_interval_ms": 100,
-      "enabled_by_default": false
+      "min_interval_ms": 1000,
+      "enabled_by_default": true
     },
     {
       "name": "points_dropped",
@@ -527,8 +587,8 @@
     {
       "name": "print_fan_act",
       "type": "integer",
-      "min_interval_ms": 1000,
-      "enabled_by_default": false
+      "min_interval_ms": 0,
+      "enabled_by_default": true
     },
     {
       "name": "print_filename",
@@ -579,6 +639,18 @@
       "enabled_by_default": false
     },
     {
+      "name": "ps_spd_big",
+      "type": "custom",
+      "min_interval_ms": 10000,
+      "enabled_by_default": true
+    },
+    {
+      "name": "ps_spd_chgs",
+      "type": "custom",
+      "min_interval_ms": 10000,
+      "enabled_by_default": true
+    },
+    {
       "name": "ps_spd_chng",
       "type": "custom",
       "min_interval_ms": 0,
@@ -589,6 +661,18 @@
       "type": "custom",
       "min_interval_ms": 0,
       "enabled_by_default": false
+    },
+    {
+      "name": "ps_stall_its",
+      "type": "custom",
+      "min_interval_ms": 10000,
+      "enabled_by_default": true
+    },
+    {
+      "name": "ps_stalls",
+      "type": "custom",
+      "min_interval_ms": 10000,
+      "enabled_by_default": true
     },
     {
       "name": "rx_ring",
@@ -612,6 +696,12 @@
       "name": "sdpos",
       "type": "integer",
       "min_interval_ms": 100,
+      "enabled_by_default": true
+    },
+    {
+      "name": "shaper_fit",
+      "type": "custom",
+      "min_interval_ms": 0,
       "enabled_by_default": true
     },
     {
@@ -669,6 +759,12 @@
       "enabled_by_default": true
     },
     {
+      "name": "syslog_drop",
+      "type": "integer",
+      "min_interval_ms": 1009,
+      "enabled_by_default": true
+    },
+    {
       "name": "task_cpu",
       "type": "custom",
       "min_interval_ms": 0,
@@ -690,19 +786,19 @@
       "name": "temp_brd",
       "type": "float",
       "min_interval_ms": 991,
-      "enabled_by_default": false
+      "enabled_by_default": true
     },
     {
       "name": "temp_hbr",
       "type": "custom",
       "min_interval_ms": 0,
-      "enabled_by_default": false
+      "enabled_by_default": true
     },
     {
       "name": "temp_mcu",
       "type": "integer",
-      "min_interval_ms": 0,
-      "enabled_by_default": false
+      "min_interval_ms": 1000,
+      "enabled_by_default": true
     },
     {
       "name": "temp_noz",
@@ -765,6 +861,18 @@
       "enabled_by_default": true
     },
     {
+      "name": "upx3",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "upx_c",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
       "name": "upx_f",
       "type": "custom",
       "min_interval_ms": 0,
@@ -801,6 +909,24 @@
       "enabled_by_default": true
     },
     {
+      "name": "usb_cnt",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "usb_cnt2",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
+      "name": "usb_cnt3",
+      "type": "custom",
+      "min_interval_ms": 0,
+      "enabled_by_default": true
+    },
+    {
       "name": "usb_io",
       "type": "custom",
       "min_interval_ms": 0,
@@ -822,7 +948,7 @@
       "name": "xbe_fan",
       "type": "custom",
       "min_interval_ms": 0,
-      "enabled_by_default": false
+      "enabled_by_default": true
     }
   ]
 }

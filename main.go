@@ -150,6 +150,7 @@ func run(ctx context.Context, f *flags, logger *slog.Logger) error {
 		MaxSeries:        cfg.Exporter.UDPMaxSeries,
 		SampleTimestamps: cfg.Exporter.UDPSampleTimestamps,
 		EventMetrics:     cfg.Exporter.UDPEventMetrics,
+		CounterFields:    cfg.Exporter.UDPCounterFields,
 	}, logger, self)
 	udpRegistry := prometheus.NewRegistry()
 	udpRegistry.MustRegister(udpCollector)

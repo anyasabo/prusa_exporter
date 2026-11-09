@@ -16,6 +16,13 @@ printers:
 #   # Event metrics (v=T) of the firmware. The first packet of a printer makes prusa_<name>_total at 0
 #   # for each name. An event that is not in the list gets its counter with its first point. [] disables it.
 #   udp_event_metrics: [app_start, crash_repeated, maintask_loop, modbus_reqfail, power_panic, probe_start]
+#   # Cumulative fields of the firmware metrics: firmware name -> fields ("v" for a metric without
+#   # fields). Each one is the counter prusa_<name>_<field>_total (prusa_<name>_total for "v") with
+#   # the value of the printer. If the key is not set, the default is the list in
+#   # internal/config/config.go (DefaultUDPCounterFields). {} makes all fields gauges. Example:
+#   udp_counter_fields:
+#     stp_stall: [v]
+#     task_cpu: [t]
 
 # Optional settings of the PrusaLink metrics.
 # prusalink:

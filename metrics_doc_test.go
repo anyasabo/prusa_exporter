@@ -97,7 +97,8 @@ alert rules that use the metric.
 	writeSection(t, &b, base, "/metrics/udp", "UDP",
 		"The fixed series. The firmware metrics are not in this list. A firmware metric `NAME` with a number is "+
 			"`prusa_NAME`. An event (`v=T`, or the count `n`) is `prusa_NAME_total`. A string is `prusa_NAME_info` "+
-			"with the label `value`. The events in `exporter.udp_event_metrics` start at 0.", nil)
+			"with the label `value`. The events in `exporter.udp_event_metrics` start at 0. A field in "+
+			"`exporter.udp_counter_fields` is the counter `prusa_NAME_FIELD_total` (`prusa_NAME_total` for `v`).", nil)
 	writeSection(t, &b, base, "/metrics", "Exporter",
 		"The metrics of the exporter itself. The endpoint also has the standard `go_*`, `process_*` and "+
 			"`promhttp_metric_handler_*` metrics, which are not in this list. `prusa_exporter_loki_pushes_total` "+

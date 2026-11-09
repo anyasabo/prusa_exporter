@@ -25,6 +25,7 @@ func TestParse(t *testing.T) {
 					UDPSeriesTTL:          DefaultUDPSeriesTTL,
 					UDPMaxSeries:          DefaultUDPMaxSeries,
 					UDPEventMetrics:       DefaultUDPEventMetrics,
+					UDPCounterFields:      DefaultUDPCounterFields,
 					PrusaLinkScrapeBudget: DefaultPrusaLinkScrapeBudget,
 				},
 				Printers:  []Printer{{Address: "10.0.0.1", APIKey: "k"}},
@@ -39,6 +40,9 @@ exporter:
   udp_sample_timestamps: true
   udp_max_series: 50
   udp_event_metrics: []
+  udp_counter_fields:
+    stp_stall: [v]
+    ps_stalls: [x, y]
   prusalink_scrape_budget: 3s
 printers:
   - address: printer.lan:8080
@@ -56,6 +60,7 @@ prusalink:
 					UDPSampleTimestamps:   true,
 					UDPMaxSeries:          50,
 					UDPEventMetrics:       []string{},
+					UDPCounterFields:      map[string][]string{"stp_stall": {"v"}, "ps_stalls": {"x", "y"}},
 					PrusaLinkScrapeBudget: 3 * time.Second,
 				},
 				Printers: []Printer{{Address: "printer.lan:8080", Username: "maker", Password: "secret", Name: "MK4", Type: "MK4S"}},
@@ -73,6 +78,7 @@ prusalink:
 					UDPSeriesTTL:          DefaultUDPSeriesTTL,
 					UDPMaxSeries:          DefaultUDPMaxSeries,
 					UDPEventMetrics:       DefaultUDPEventMetrics,
+					UDPCounterFields:      DefaultUDPCounterFields,
 					PrusaLinkScrapeBudget: DefaultPrusaLinkScrapeBudget,
 				},
 				PrusaLink: PrusaLink{CommonLabels: DefaultCommonLabels},

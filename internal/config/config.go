@@ -26,6 +26,46 @@ const (
 // METRIC_VALUE_EVENT metrics of the Prusa Buddy firmware.
 var DefaultUDPEventMetrics = []string{"app_start", "crash_repeated", "maintask_loop", "modbus_reqfail", "power_panic", "probe_start"}
 
+// DefaultUDPCounterFields is the default of Exporter.UDPCounterFields: the cumulative
+// fields of the Buddy firmware metrics. The key is the firmware metric name. The value
+// is its counter fields. "v" is the value of a metric without fields.
+//
+// Upstream firmware: cmdcnt, crash_stat, plan_cnt, plan_unopt, points_dropped, stp_stall,
+// store_*. plan_slow is also a counter, but only with SLOWDOWN, which no Prusa printer has.
+// The fork of anyasabo (branches upload-experiments and metrics-defaults) adds the rest.
+// Each name was checked against the firmware source and against 7 days of data: the
+// value goes down only at a printer restart.
+var DefaultUDPCounterFields = map[string][]string{
+	"cmdcnt":           {"v"},
+	"crash_stat":       {"total"},
+	"gui_prof":         {"n", "t", "s"},
+	"gui_prof2":        {"d", "g", "r"},
+	"gui_prof3":        {"o", "c", "p"},
+	"net_cnt":          {"e", "w", "n"},
+	"net_cnt2":         {"q", "u"},
+	"phstep_prof":      {"f", "u"},
+	"phstep_prof2":     {"a", "b"},
+	"phstep_prof3":     {"c", "d"},
+	"plan_cnt":         {"v"},
+	"plan_unopt":       {"v"},
+	"points_dropped":   {"v"},
+	"ps_spd_big":       {"x", "y"},
+	"ps_spd_chgs":      {"x", "y"},
+	"ps_stall_its":     {"x", "y"},
+	"ps_stalls":        {"x", "y"},
+	"rxd_eth":          {"a", "m", "o"},
+	"rxd_tcp":          {"r", "d", "t", "c"},
+	"stp_stall":        {"v"},
+	"store_bytes":      {"v"},
+	"store_items":      {"v"},
+	"store_migrations": {"v"},
+	"syslog_drop":      {"v"},
+	"task_cpu":         {"t"},
+	"usb_cnt":          {"r", "w", "t"},
+	"usb_cnt2":         {"s", "x", "o"},
+	"usb_cnt3":         {"l", "c", "d"},
+}
+
 // The label names of the PrusaLink metrics and the Loki streams.
 const (
 	LabelAddress = "printer_address"
@@ -64,6 +104,12 @@ type Exporter struct {
 	// packet of a printer makes prusa_<name>_total at 0 for each name. If the key is
 	// not set, the list is DefaultUDPEventMetrics. An empty list disables it.
 	UDPEventMetrics []string `yaml:"udp_event_metrics"`
+	// UDPCounterFields are the cumulative fields of the UDP metrics: a map from the
+	// firmware metric name to its field names ("v" for a metric without fields). Each
+	// one is the counter prusa_<name>_<field>_total (prusa_<name>_total for "v"), with
+	// the value of the printer. If the key is not set, the map is
+	// DefaultUDPCounterFields. An empty map makes all fields gauges.
+	UDPCounterFields map[string][]string `yaml:"udp_counter_fields"`
 	// PrusaLinkScrapeBudget is the maximum time for all PrusaLink requests of one
 	// printer in one scrape. The scrape timeout of the scraper can make it shorter.
 	PrusaLinkScrapeBudget time.Duration `yaml:"prusalink_scrape_budget"`
@@ -130,6 +176,12 @@ func (c *Config) setDefaults() {
 	}
 	if c.Exporter.UDPEventMetrics == nil {
 		c.Exporter.UDPEventMetrics = slices.Clone(DefaultUDPEventMetrics)
+	}
+	if c.Exporter.UDPCounterFields == nil {
+		c.Exporter.UDPCounterFields = make(map[string][]string, len(DefaultUDPCounterFields))
+		for name, fields := range DefaultUDPCounterFields {
+			c.Exporter.UDPCounterFields[name] = slices.Clone(fields)
+		}
 	}
 	if len(c.PrusaLink.CommonLabels) == 0 {
 		c.PrusaLink.CommonLabels = slices.Clone(DefaultCommonLabels)
