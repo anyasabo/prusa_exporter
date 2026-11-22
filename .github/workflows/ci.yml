@@ -2,9 +2,12 @@ name: ci
 
 on:
   push:
-    branches: [main, master, modernize]
+    branches: [main, fork]
   pull_request:
   workflow_dispatch:
+  # Weekly: new advisories appear with no change to the code.
+  schedule:
+    - cron: "37 4 * * 1"
 
 permissions: {}
 
@@ -24,6 +27,9 @@ jobs:
       # mise installs the tool versions of mise.toml, the same as on a local machine.
       - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
       - run: mise run ci
+      # A new advisory must not fail an unrelated change: report only.
+      - run: mise run vulncheck
+        continue-on-error: true
       - run: mise run fuzz
         env:
           FUZZTIME: 20s

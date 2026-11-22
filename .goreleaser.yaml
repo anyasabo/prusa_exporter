@@ -8,6 +8,8 @@ project_name: prusa_exporter
 before:
   hooks:
     - go mod verify
+    # The license check (fails the release) and third_party_licenses.csv.
+    - mise run licenses
 
 builds:
   - id: prusa_exporter
@@ -71,6 +73,8 @@ kos:
 
 release:
   prerelease: auto
+  extra_files:
+    - glob: third_party_licenses.csv
 
 changelog:
   use: github

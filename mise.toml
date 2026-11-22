@@ -3,7 +3,7 @@
 # Renovate keeps the versions current.
 
 [tools]
-go = "1.27.3"
+go = "1.27.4"
 golangci-lint = "2.15.0"
 goreleaser = "2.20.0"
 # goreleaser uses syft for the SBOMs.
@@ -11,6 +11,8 @@ syft = "1.57.0"
 actionlint = "1.7.12"
 zizmor = "1.32.0"
 "go:golang.org/x/vuln/cmd/govulncheck" = "1.9.0"
+# go-licenses checks that each dependency has a license that AGPL-3.0 allows.
+"go:github.com/google/go-licenses/v2" = "2.0.1"
 # promtool checks and tests the alert rules.
 "aqua:prometheus/prometheus" = "3.16.0"
 
@@ -34,8 +36,19 @@ description = "Run the unit tests of the alert rules"
 run = "promtool test rules alerts/prusa_exporter.test.yml"
 
 [tasks.vulncheck]
-description = "Check the dependencies for known vulnerabilities"
+description = "Check the dependencies for known vulnerabilities (CI reports it, it does not fail the build)"
 run = "govulncheck ./..."
+
+# The exporter is AGPL-3.0-only. Allowed: permissive licenses, MPL-2.0, LGPL, GPL-3.0 and
+# AGPL-3.0. Not allowed: GPL-2.0-only (it cannot be combined with AGPL-3.0) and unknown licenses.
+[tasks.licenses]
+description = "Check the licenses of the dependencies and write third_party_licenses.csv"
+# pipefail: without it, the grep that hides the klog warnings would hide a failed check.
+shell = "bash -o pipefail -c"
+run = [
+  "go-licenses check ./... --allowed_licenses=0BSD,Apache-2.0,BSD-2-Clause,BSD-3-Clause,CC0-1.0,ISC,MIT,MPL-2.0,Unlicense,Zlib,LGPL-2.1,LGPL-3.0,GPL-3.0,AGPL-3.0 2>&1 | grep -v '^W[0-9]'",
+  "go-licenses report ./... --ignore github.com/anyasabo/prusa_exporter > third_party_licenses.csv 2>/dev/null",
+]
 
 [tasks.test]
 description = "Run the tests with the race detector and coverage"
@@ -51,7 +64,7 @@ done
 
 [tasks.ci]
 description = "Run all checks of CI"
-depends = ["lint", "test", "test-alerts", "vulncheck"]
+depends = ["lint", "licenses", "test", "test-alerts"]
 
 [tasks.build]
 description = "Build the binary for this platform into dist/"

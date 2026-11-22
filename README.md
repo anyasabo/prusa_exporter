@@ -4,6 +4,8 @@
 ![tag](https://img.shields.io/github/v/tag/pstrobl96/prusa_exporter) 
 ![license](https://img.shields.io/github/license/pstrobl96/prusa_exporter)
 
+> **This is the fork [anyasabo/prusa_exporter](https://github.com/anyasabo/prusa_exporter)** of [pubeldev/prusa_exporter](https://github.com/pubeldev/prusa_exporter). It renames metrics and flags, and it fixes metric bugs. Read [docs/FORK.md](docs/FORK.md) for the differences, the install and the upstream plan.
+
 # Table of Contents
 - [Table of Contents](#table-of-contents)
 - [prusa\_exporter](#prusa_exporter)
@@ -176,7 +178,8 @@ Run `prusa_exporter --help` for the full list.
 
 ```
 mise install
-mise run ci               # linters, go mod tidy check, tests with -race, govulncheck
+mise run ci               # linters, go mod tidy check, license check, tests with -race
+mise run vulncheck        # govulncheck (CI reports it, it does not fail the build)
 mise run fuzz             # the fuzz tests of the UDP parser (FUZZTIME=30s)
 mise run build            # binary for this platform in dist/
 mise run release-dry-run  # all binaries, checksums and SBOMs in dist/

@@ -37,3 +37,4 @@ go.work.sum
 /prusa_exporter
 /dist/
 /prusa.yml
+/third_party_licenses.csv
