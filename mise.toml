@@ -44,9 +44,10 @@ run = "govulncheck ./..."
 [tasks.licenses]
 description = "Check the licenses of the dependencies and write third_party_licenses.csv"
 # pipefail: without it, the grep that hides the klog warnings would hide a failed check.
+# "|| true": grep exits 1 when no line is left, which is a pass.
 shell = "bash -o pipefail -c"
 run = [
-  "go-licenses check ./... --allowed_licenses=0BSD,Apache-2.0,BSD-2-Clause,BSD-3-Clause,CC0-1.0,ISC,MIT,MPL-2.0,Unlicense,Zlib,LGPL-2.1,LGPL-3.0,GPL-3.0,AGPL-3.0 2>&1 | grep -v '^W[0-9]'",
+  "go-licenses check ./... --allowed_licenses=0BSD,Apache-2.0,BSD-2-Clause,BSD-3-Clause,CC0-1.0,ISC,MIT,MPL-2.0,Unlicense,Zlib,LGPL-2.1,LGPL-3.0,GPL-3.0,AGPL-3.0 2>&1 | { grep -v '^W[0-9]' || true; }",
   "go-licenses report ./... --ignore github.com/anyasabo/prusa_exporter > third_party_licenses.csv 2>/dev/null",
 ]
 
