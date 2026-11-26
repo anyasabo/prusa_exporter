@@ -16,7 +16,7 @@ import (
 	"github.com/icholy/digest"
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/anyasabo/prusa_exporter/internal/config"
+	"github.com/anyasabo/prusa_exporter/v3/internal/config"
 )
 
 // maxBodySize is the maximum size of a PrusaLink response that the client reads.

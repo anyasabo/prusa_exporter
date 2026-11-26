@@ -14,7 +14,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/anyasabo/prusa_exporter/internal/config"
+	"github.com/anyasabo/prusa_exporter/v3/internal/config"
 )
 
 const (

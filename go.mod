@@ -1,4 +1,4 @@
-module github.com/anyasabo/prusa_exporter
+module github.com/anyasabo/prusa_exporter/v3
 
 go 1.27.4
 

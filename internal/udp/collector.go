@@ -14,7 +14,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/anyasabo/prusa_exporter/internal/logging"
+	"github.com/anyasabo/prusa_exporter/v3/internal/logging"
 )
 
 // The label names that identify a printer on the UDP metrics.

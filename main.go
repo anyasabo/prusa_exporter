@@ -29,10 +29,10 @@ import (
 	"github.com/prometheus/exporter-toolkit/web/kingpinflag"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/anyasabo/prusa_exporter/internal/config"
-	"github.com/anyasabo/prusa_exporter/internal/logging"
-	"github.com/anyasabo/prusa_exporter/internal/prusalink"
-	"github.com/anyasabo/prusa_exporter/internal/udp"
+	"github.com/anyasabo/prusa_exporter/v3/internal/config"
+	"github.com/anyasabo/prusa_exporter/v3/internal/logging"
+	"github.com/anyasabo/prusa_exporter/v3/internal/prusalink"
+	"github.com/anyasabo/prusa_exporter/v3/internal/udp"
 )
 
 const name = "prusa_exporter"

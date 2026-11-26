@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 prusa_exporter is a Prometheus exporter for Prusa 3D printers. This repo is the fork
 `anyasabo/prusa_exporter` of `pubeldev/prusa_exporter`. The fork diverges on purpose: the module
-path is `github.com/anyasabo/prusa_exporter`, and the code structure, flags and metric names are
+path is `github.com/anyasabo/prusa_exporter/v3`, and the code structure, flags and metric names are
 different from upstream. `main` of the fork follows upstream. Do the work on a work branch.
 
 ## Commands

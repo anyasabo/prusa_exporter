@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anyasabo/prusa_exporter/internal/logging"
+	"github.com/anyasabo/prusa_exporter/v3/internal/logging"
 )
 
 const (

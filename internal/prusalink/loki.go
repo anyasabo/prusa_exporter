@@ -17,8 +17,8 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/anyasabo/prusa_exporter/internal/config"
-	"github.com/anyasabo/prusa_exporter/internal/logging"
+	"github.com/anyasabo/prusa_exporter/v3/internal/config"
+	"github.com/anyasabo/prusa_exporter/v3/internal/logging"
 )
 
 // lokiRepushInterval is the time after which the exporter sends the thumbnail of the

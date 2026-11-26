@@ -40,7 +40,7 @@ linters:
     wrapcheck:
       # Wrap the errors from outside the module. Our packages wrap their own errors.
       ignore-package-globs:
-        - github.com/anyasabo/prusa_exporter/*
+        - github.com/anyasabo/prusa_exporter/v3/*
       extra-ignore-sigs:
         # The *url.Error of Client.Do has the method and the URL.
         - (*net/http.Client).Do(
@@ -65,4 +65,4 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/anyasabo/prusa_exporter
+        - github.com/anyasabo/prusa_exporter/v3

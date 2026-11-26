@@ -7,7 +7,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/anyasabo/prusa_exporter/internal/config"
+	"github.com/anyasabo/prusa_exporter/v3/internal/config"
 )
 
 // experimentMetrics are in the reference build of docs/firmware/coreonel.json, but

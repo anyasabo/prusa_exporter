@@ -14,8 +14,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/anyasabo/prusa_exporter/internal/config"
-	"github.com/anyasabo/prusa_exporter/internal/logging"
+	"github.com/anyasabo/prusa_exporter/v3/internal/config"
+	"github.com/anyasabo/prusa_exporter/v3/internal/logging"
 )
 
 // States are the values of printer.state in /api/v1/status (DeviceState in the
