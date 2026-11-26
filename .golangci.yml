@@ -1,37 +1,38 @@
 version: "2"
 
 linters:
-  default: standard
-  enable:
-    - bodyclose
-    - canonicalheader
-    - contextcheck
-    - durationcheck
-    - errorlint
-    - exhaustive
-    - fatcontext
-    - gocritic
-    - gosec
-    - misspell
-    - modernize
-    - musttag
-    - nilerr
-    - nilnesserr
-    - nilnil
-    - noctx
-    - nolintlint
-    - perfsprint
-    - predeclared
-    - promlinter
-    - revive
-    - sloglint
-    - thelper
-    - tparallel
-    - unconvert
-    - unparam
-    - usestdlibvars
-    - usetesting
-    - wrapcheck
+  # All linters, except the ones below. A new golangci-lint version can add linters:
+  # each one is on at once, and its findings fail the lint until we fix or disable it.
+  default: all
+  disable:
+    # Style rules that the Go ecosystem does not use widely.
+    - embeddedstructfieldcheck # The order of struct fields.
+    - exhaustruct # Each struct literal must set each field.
+    - exhaustruct_v5
+    - funcorder # The order of methods in a file.
+    - lll # The line length. gofumpt formats the code.
+    - nlreturn # A blank line before each return.
+    - noinlineerr # Forbids "if err := f(); err != nil".
+    - nonamedreturns # Forbids named results, also for documentation.
+    - tagalign # The alignment of struct tags.
+    - varnamelen # Short names are idiomatic in Go.
+    - wsl # Blank lines between statements.
+    - wsl_v5
+    # Rules that do not fit this code.
+    - depguard # Needs a list of allowed modules. go-licenses checks the licenses.
+    - gomodguard # Deprecated: replaced by gomodguard_v2, which is on.
+    - err113 # The config errors give the field and the value. Nothing compares them.
+    - forcetypeassert # Each case is an idiom: http.DefaultTransport.(*http.Transport), sync.Pool.Get().(*T).
+    - gochecknoglobals # Prometheus descriptors and metrics are package variables by convention.
+    - goconst # Flags the API paths and the label values, which are clearer as literals.
+    - ireturn # Flags generic functions and prometheus.Gatherer.
+    - mnd # Flags buckets, ports and timeouts, which are clearer as literals.
+    - tagliatelle # The YAML keys are the config format of upstream.
+    - testpackage # The tests use the unexported functions.
+    # Size and complexity limits: the long functions are table tests and one parser.
+    - cyclop
+    - funlen
+    - gocognit
   settings:
     exhaustive:
       default-signifies-exhaustive: true

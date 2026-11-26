@@ -48,6 +48,8 @@ func BenchmarkCollect(b *testing.B) {
 
 // TestHandleAllocations makes sure that a datagram for known series allocates only
 // the copy of the datagram. The exporter can run on a very small host.
+//
+//nolint:paralleltest // testing.AllocsPerRun does not allow a parallel test.
 func TestHandleAllocations(t *testing.T) {
 	if raceEnabled {
 		t.Skip("the race detector adds allocations")

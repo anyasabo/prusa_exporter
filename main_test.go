@@ -182,6 +182,7 @@ func get(t *testing.T, url string) string {
 // TestRun starts the exporter with a fake printer, sends a UDP message, reads all
 // endpoints and stops the exporter.
 func TestRun(t *testing.T) {
+	t.Parallel()
 	printer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/v1/status":

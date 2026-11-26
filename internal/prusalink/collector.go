@@ -226,6 +226,7 @@ func scrapeBudget(budget time.Duration, header string) time.Duration {
 
 // scrape is the collector of one scrape.
 type scrape struct {
+	//nolint:containedctx // Collect has no context argument. A scrape object lives for one scrape only.
 	ctx    context.Context
 	budget time.Duration
 	e      *Exporter

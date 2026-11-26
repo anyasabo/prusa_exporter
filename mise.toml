@@ -9,6 +9,8 @@ goreleaser = "2.20.3"
 # goreleaser uses syft for the SBOMs.
 syft = "1.57.2"
 actionlint = "1.7.12"
+# actionlint checks the run: steps of the workflows with shellcheck, if shellcheck is installed.
+shellcheck = "0.11.0"
 zizmor = "1.33.1"
 "go:golang.org/x/vuln/cmd/govulncheck" = "1.10.0"
 # go-licenses checks that each dependency has a license that AGPL-3.0 allows.

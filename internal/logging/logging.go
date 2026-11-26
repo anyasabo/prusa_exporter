@@ -24,12 +24,14 @@ const ECSVersion = "9.5.0"
 // The log keys. Use these constants, not strings: sloglint (no-raw-keys) makes sure.
 const (
 	// ECS fields.
+
 	ErrorMessage  = "error.message"
 	ServerAddress = "server.address"
 	SourceIP      = "source.ip"
 	SourcePort    = "source.port"
 
 	// Custom fields.
+
 	PrinterAddress = "prusa.printer.address"
 	PrinterName    = "prusa.printer.name"
 	PrinterMAC     = "prusa.printer.mac"
