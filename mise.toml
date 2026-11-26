@@ -54,8 +54,12 @@ run = [
 ]
 
 [tasks.test]
-description = "Run the tests with the race detector and coverage"
-run = "go test -race -shuffle=on -coverprofile=coverage.out ./..."
+description = "Run the tests with the race detector and coverage, then the allocation tests without it"
+run = [
+  "go test -race -shuffle=on -coverprofile=coverage.out ./...",
+  # The race detector adds allocations, so these tests skip under -race.
+  "go test -run Allocations ./...",
+]
 
 [tasks.fuzz]
 description = "Run each fuzz test for a short time (FUZZTIME, default 30s)"

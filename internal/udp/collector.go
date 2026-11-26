@@ -84,6 +84,8 @@ type family struct {
 	name string
 	help string
 	kind metricKind
+	// n is the number of series of the family. A family with no series is deleted.
+	n int
 }
 
 // series is one label set of a family. The label names can be different between the
@@ -130,7 +132,9 @@ type Options struct {
 	// SeriesTTL is the time after which a gauge or info series without a new point
 	// goes away. Counters do not expire. Zero or less disables the expiry.
 	SeriesTTL time.Duration
-	// MaxSeries is the maximum number of series. Zero or less is no limit.
+	// MaxSeries is the maximum number of series. Each printer and each metric with
+	// error points count as one too, because the datagrams make them. Zero or less is
+	// no limit.
 	MaxSeries int
 	// SampleTimestamps adds the estimated time of the last point to each sample.
 	SampleTimestamps bool
@@ -241,7 +245,7 @@ func (c *Collector) expire() {
 	cutoff := c.now().Add(-c.opts.SeriesTTL)
 	for key, s := range c.series {
 		if s.family.kind != kindCounter && s.updated.Before(cutoff) {
-			delete(c.series, key)
+			c.deleteSeries(key, s)
 			c.metrics.seriesExpired.Inc()
 		}
 	}
@@ -313,17 +317,45 @@ func (c *Collector) setKey() {
 	}
 }
 
-// validTags tells if each tag can be a label. The names must be classic Prometheus
-// names: promhttp changes the other characters to "_" for a classic scraper, and two
-// tags can then get the same name. The values must be valid UTF-8, which also keeps
-// the byte 0xff, the separator of the series keys, out of them.
-func validTags(tags []tag) bool {
-	for _, t := range tags {
+// validPoint tells if the names of p can be Prometheus names, before any series lookup.
+// The point name, the field keys and the tag keys must be classic names: promhttp
+// changes the other characters to "_" for a classic scraper, and two names can then
+// become one. The tag values must be valid UTF-8. Together, these checks keep the
+// separators of the series keys (0xff and "=") out of the names and the values.
+func validPoint(p *point) bool {
+	if !model.LegacyValidation.IsValidLabelName(p.Name) {
+		return false
+	}
+	for _, f := range p.Fields {
+		if !model.LegacyValidation.IsValidLabelName(f.key) {
+			return false
+		}
+	}
+	for _, t := range p.Tags {
 		if !model.LegacyValidation.IsValidLabelName(t.key) || !utf8.ValidString(t.value) {
 			return false
 		}
 	}
 	return true
+}
+
+// full tells if the series limit is reached. The printers and the error points count
+// too, because the datagrams make them. The caller holds c.mu.
+func (c *Collector) full() bool {
+	if c.opts.MaxSeries <= 0 || len(c.series)+len(c.printers)+len(c.pointErrors) < c.opts.MaxSeries {
+		return false
+	}
+	c.warnOnce("\xffmax_series", "The UDP series limit is reached. The exporter drops the points of new series.", logging.SeriesLimit, c.opts.MaxSeries)
+	return true
+}
+
+// deleteSeries deletes a series, and its family if the family has no other series.
+// The caller holds c.mu.
+func (c *Collector) deleteSeries(key string, s *series) {
+	delete(c.series, key)
+	if s.family.n--; s.family.n == 0 {
+		delete(c.families, s.family.name)
+	}
 }
 
 // setLabels writes the tags of p and the printer labels to c.labels, sorted by name.
@@ -352,19 +384,17 @@ func (c *Collector) getSeries(help helpSpec, extra tag) *series {
 		return s
 	}
 	// The limit applies before a new family, so that the families map is also bounded.
-	if c.opts.MaxSeries > 0 && len(c.series) >= c.opts.MaxSeries {
-		c.warnOnce("\xffmax_series", "The UDP series limit is reached. The exporter drops the points of new series.", logging.SeriesLimit, c.opts.MaxSeries)
+	if c.full() {
 		return nil
 	}
 	if reservedNames[string(c.nameBuf)] {
 		c.warnOnce(string(c.nameBuf), "A UDP metric has a reserved name. The exporter ignores it.", logging.MetricName, string(c.nameBuf))
 		return nil
 	}
+	// A new family goes into the map only with its first valid series, below.
 	fam, ok := c.families[string(c.nameBuf)]
 	if !ok {
-		name := string(c.nameBuf)
-		fam = &family{name: name, help: help.text(), kind: help.kind}
-		c.families[name] = fam
+		fam = &family{name: string(c.nameBuf), help: help.text(), kind: help.kind}
 	}
 	if fam.kind != help.kind {
 		c.warnOnce(fam.name, "A UDP point needs a different metric type than the first point of the metric. The exporter ignores the point.", logging.MetricName, fam.name)
@@ -382,9 +412,13 @@ func (c *Collector) getSeries(help helpSpec, extra tag) *series {
 	}
 	desc := prometheus.NewDesc(fam.name, fam.help, names, nil)
 	if _, err := prometheus.NewConstMetric(desc, help.kind.valueType(), 0, values...); err != nil {
-		c.warnOnce(fam.name, "Cannot make a UDP metric", logging.MetricName, fam.name, logging.MetricLabels, names, logging.ErrorMessage, err)
+		c.warnOnce("\xffinvalid_series", "Cannot make a UDP metric", logging.MetricName, fam.name, logging.MetricLabels, names, logging.ErrorMessage, err)
 		return nil
 	}
+	if !ok {
+		c.families[fam.name] = fam
+	}
+	fam.n++
 	s := &series{family: fam, desc: desc, labelValues: values}
 	c.series[string(c.keyBuf)] = s
 	return s
@@ -396,35 +430,25 @@ func (c *Collector) record(ctx context.Context, mac string, addr netip.Addr, poi
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	pk, st := c.printer(printerKey{mac, addr})
+	if st == nil {
+		return 0, len(points)
+	}
 	st.lastPush = received
 	st.packets++
 	st.points += float64(len(points))
 	for i := range points {
 		p := &points[i]
 		if msg, ok := errorMessage(p); ok {
-			if !utf8.ValidString(p.Name) {
-				// The name becomes the label "metric", which must be valid UTF-8.
-				dropped++
-				continue
-			}
 			// The firmware sends "name error=\"...\"" when it cannot record a value.
-			ek := errorKey{printerKey: pk, metric: p.Name}
-			n := c.pointErrors[ek]
-			if n == nil {
-				n = new(float64)
-				ek.metric = strings.Clone(ek.metric)
-				c.pointErrors[ek] = n
-			}
-			*n++
-			st.errors++
-			c.metrics.errorPoints.Inc()
-			if c.logger.Enabled(ctx, slog.LevelDebug) {
+			if !c.recordError(pk, st, p.Name) {
+				dropped++
+			} else if c.logger.Enabled(ctx, slog.LevelDebug) {
 				c.logger.DebugContext(ctx, "Error point from the printer", logging.PrinterMAC, mac, logging.MetricName, p.Name, logging.PointError, msg)
 			}
 			continue
 		}
-		if !validTags(p.Tags) {
-			c.warnOnce("\xffinvalid_tags", "A UDP point has a tag that is not a valid label. The exporter drops the point.", logging.MetricName, strings.ToValidUTF8(p.Name, "?"))
+		if !validPoint(p) {
+			c.warnOnce("\xffinvalid_point", "A UDP point has a name, a field or a tag that is not a valid Prometheus name. The exporter drops the point.", logging.MetricName, strings.ToValidUTF8(p.Name, "?"))
 			dropped++
 			continue
 		}
@@ -438,12 +462,38 @@ func (c *Collector) record(ctx context.Context, mac string, addr netip.Addr, poi
 	return stored, dropped
 }
 
+// recordError counts an error point of the metric name. It returns false if it drops
+// the point. The caller holds c.mu.
+func (c *Collector) recordError(pk printerKey, st *printerStats, name string) bool {
+	if !utf8.ValidString(name) {
+		// The name becomes the label "metric", which must be valid UTF-8.
+		return false
+	}
+	ek := errorKey{printerKey: pk, metric: name}
+	n := c.pointErrors[ek]
+	if n == nil {
+		if c.full() {
+			return false
+		}
+		n = new(float64)
+		ek.metric = strings.Clone(ek.metric)
+		c.pointErrors[ek] = n
+	}
+	*n++
+	st.errors++
+	c.metrics.errorPoints.Inc()
+	return true
+}
+
 // printer returns the key in the map and the stats of the printer. The first time, it
 // makes the counter of each known event at 0. pk.mac can refer to a datagram. The
 // returned key does not. The caller holds c.mu.
 func (c *Collector) printer(pk printerKey) (printerKey, *printerStats) {
 	if st, ok := c.printers[pk]; ok {
 		return printerKey{st.mac, pk.addr}, st
+	}
+	if c.full() {
+		return pk, nil
 	}
 	pk.mac = strings.Clone(pk.mac)
 	st := &printerStats{mac: pk.mac, address: pk.addr.String()}
@@ -544,7 +594,7 @@ func (c *Collector) recordInfo(p *point, f field, received time.Time) bool {
 	c.setName(p.Name, f.key, "_info")
 	c.setKey()
 	if old, ok := c.series[string(c.keyBuf)]; ok && old.family.kind == kindInfo && old.info != f.str {
-		delete(c.series, string(c.keyBuf))
+		c.deleteSeries(string(c.keyBuf), old)
 	}
 	s := c.getSeries(helpSpec{kind: kindInfo, fwName: p.Name, field: f.key}, tag{"value", f.str})
 	if s == nil {

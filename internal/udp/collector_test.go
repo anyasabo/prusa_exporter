@@ -2,6 +2,7 @@ package udp
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/netip"
@@ -145,7 +146,8 @@ func TestCollectorDrops(t *testing.T) {
 	}{
 		{"kind conflict", Options{}, []string{"x v=1 0", `x_info v=1 0`, `x v="s" 0`, "x_total v=1 0", "x v=T 0"}, 2},
 		{"reserved name", Options{}, []string{"last_push_timestamp_seconds v=1 0", "udp_point_errors_total v=1 0"}, 2},
-		{"series limit", Options{MaxSeries: 2}, []string{"a v=1 0", "b v=1 0", "c v=1 0", "a v=2 0"}, 1},
+		// The printer counts as one entry of the limit.
+		{"series limit", Options{MaxSeries: 3}, []string{"a v=1 0", "b v=1 0", "c v=1 0", "a v=2 0"}, 1},
 		{"invalid label name", Options{}, []string{"x,__bad=1 v=1 0"}, 1},
 	}
 	for _, tt := range tests {
@@ -276,6 +278,46 @@ func TestCollectorLegacyNames(t *testing.T) {
 	`, "prusa_a_b", "prusa_k")
 	if got := testutil.ToFloat64(c.metrics.pointsDropped); got != 3 {
 		t.Errorf("dropped points = %v, want 3", got)
+	}
+}
+
+// TestCollectorBoundedMaps sends many new names, printers and error points. The maps of
+// the collector must stay within the series limit, also for points that make no series.
+func TestCollectorBoundedMaps(t *testing.T) {
+	t.Parallel()
+	const limit = 5
+	c, _ := newTestCollector(t, Options{MaxSeries: limit, SeriesTTL: time.Minute})
+	for i := range 100 {
+		// The tag "value" is the label of the info series: each point fails in getSeries.
+		c.Handle(t.Context(), msg(fmt.Sprintf(`r%d,value=a s="x" 0`, i), fmt.Sprintf(`e%d error="x" 0`, i)), printer, t0)
+		mac := fmt.Sprintf("<14>1 - M%d buddy - - - msg=1,tm=1,v=4 a v=1 0\n", i)
+		c.Handle(t.Context(), []byte(mac), printer, t0)
+	}
+	if n := len(c.families) + len(c.series) + len(c.printers) + len(c.pointErrors) + len(c.warned); n > 4*limit {
+		t.Errorf("families %d, series %d, printers %d, point errors %d, warnings %d: want at most %d in all",
+			len(c.families), len(c.series), len(c.printers), len(c.pointErrors), len(c.warned), 4*limit)
+	}
+	// After the TTL, the gauge series and their families go away.
+	c.now = func() time.Time { return t0.Add(time.Hour) }
+	testutil.CollectAndCount(c)
+	for name, fam := range c.families {
+		if fam.kind != kindCounter {
+			t.Errorf("family %s has no series after the TTL, but it stays", name)
+		}
+	}
+}
+
+// TestCollectorInfoKeyBeforeCheck sends an info point whose name gives the key of
+// another info series. The point must not change or delete that series.
+func TestCollectorInfoKeyBeforeCheck(t *testing.T) {
+	t.Parallel()
+	c, _ := newTestCollector(t, Options{})
+	// The key of prusa_s_info{a="y_info"} is "prusa_s_info", 0xff, "a=y_info", then the
+	// printer labels. The name of the second point gives the same key.
+	c.Handle(t.Context(), msg(`s,a=y_info v="one" 0`), printer, t0)
+	c.Handle(t.Context(), msg("s_info\xffa=y v=\"two\" 0"), printer, t0)
+	if got := testutil.CollectAndCount(c, "prusa_s_info"); got != 1 {
+		t.Errorf("series of prusa_s_info = %d, want 1", got)
 	}
 }
 

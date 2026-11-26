@@ -98,8 +98,9 @@ type Exporter struct {
 	// UDPSampleTimestamps adds the estimated printer time of the last point to each
 	// UDP sample. The scraper must honor the timestamps.
 	UDPSampleTimestamps bool `yaml:"udp_sample_timestamps"`
-	// UDPMaxSeries is the maximum number of UDP series. The exporter drops the points
-	// of new series above this number.
+	// UDPMaxSeries is the maximum number of UDP series. Each printer and each metric
+	// with error points count as one too. The exporter drops the points of new series,
+	// new printers and new error metrics above this number.
 	UDPMaxSeries int `yaml:"udp_max_series"`
 	// UDPEventMetrics are the firmware names of the UDP event metrics (v=T). The first
 	// packet of a printer makes prusa_<name>_total at 0 for each name. If the key is
