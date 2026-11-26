@@ -29,6 +29,10 @@ func TestParseFlags(t *testing.T) {
 		{"root path", []string{"--exporter.udp-metrics-path=/"}, true},
 		{"unknown flag", []string{"--exporter.metrics-port=1"}, true},
 		{"repeated extra metrics", []string{"--udp.extra-metrics=a", "--udp.extra-metrics=b"}, false},
+		// With the prefix, each firmware name must be a valid metric name ("24VVoltage").
+		{"prefix with a dash", []string{"--udp.prefix=prusa-"}, true},
+		{"empty prefix", []string{"--udp.prefix="}, true},
+		{"other prefix", []string{"--udp.prefix=printer_"}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

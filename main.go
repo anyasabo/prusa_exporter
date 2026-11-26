@@ -24,6 +24,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	versioncollector "github.com/prometheus/client_golang/prometheus/collectors/version"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/promslog"
 	"github.com/prometheus/common/version"
 	"github.com/prometheus/exporter-toolkit/web"
@@ -85,6 +86,11 @@ func (c *cli) Validate() error {
 	paths := map[string]bool{c.TelemetryPath: true, c.PrusaLinkPath: true, c.UDPPath: true}
 	if len(paths) != 3 || paths["/"] {
 		return errors.New("the telemetry, PrusaLink and UDP paths must be different, and not \"/\"")
+	}
+	// The firmware names can start with a digit ("24VVoltage"). With the prefix, they
+	// must be valid metric names, or the exporter drops their points.
+	if !model.LegacyValidation.IsValidMetricName(c.UDPPrefix + "0") {
+		return fmt.Errorf("--udp.prefix %q: a metric name must start with a letter, \"_\" or \":\", and have only letters, digits, \"_\" and \":\"", c.UDPPrefix)
 	}
 	if c.WebSystemdSocket && runtime.GOOS != "linux" {
 		return errors.New("--web.systemd-socket works only on Linux")

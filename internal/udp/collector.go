@@ -225,7 +225,7 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 	for _, s := range c.series {
 		m, err := prometheus.NewConstMetric(s.desc, s.family.kind.valueType(), s.value, s.labelValues...)
 		if err != nil {
-			c.warnOnce(s.family.name, "Cannot expose a UDP metric", logging.MetricName, s.family.name, logging.ErrorMessage, err)
+			c.warnOnce("\xffexpose", "Cannot expose a UDP metric", logging.MetricName, s.family.name, logging.ErrorMessage, err)
 			continue
 		}
 		if c.opts.SampleTimestamps && !s.sampled.IsZero() {
