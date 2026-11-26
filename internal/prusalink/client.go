@@ -11,6 +11,7 @@ import (
 	"maps"
 	"net/http"
 	"net/netip"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -124,7 +125,9 @@ func (c *Client) url(path string) string {
 		// A URL needs brackets around an IPv6 address. An address with a port has them.
 		host = "[" + host + "]"
 	}
-	return "http://" + host + path
+	// url.URL escapes the zone of an IPv6 address ("%25") and the path, for example a
+	// space in the file name of the job thumbnail.
+	return (&url.URL{Scheme: "http", Host: host, Path: path}).String()
 }
 
 // Do sends a request and returns the body of a 2xx response. endpoint is the value of
