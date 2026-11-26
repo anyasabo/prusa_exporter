@@ -13,20 +13,20 @@ import (
 	"net/http/pprof"
 	"os"
 	"os/signal"
+	"runtime"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
-	"github.com/alecthomas/kingpin/v2"
+	"github.com/alecthomas/kong"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	versioncollector "github.com/prometheus/client_golang/prometheus/collectors/version"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/promslog"
-	promslogflag "github.com/prometheus/common/promslog/flag"
 	"github.com/prometheus/common/version"
 	"github.com/prometheus/exporter-toolkit/web"
-	"github.com/prometheus/exporter-toolkit/web/kingpinflag"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/anyasabo/prusa_exporter/v3/internal/config"
@@ -54,41 +54,99 @@ type flags struct {
 	promslogConfig promslog.Config
 }
 
-func parseFlags(app *kingpin.Application, args []string) (*flags, error) {
-	f := &flags{}
-	app.Flag("config.file", "Path of the configuration file.").Default("prusa.yml").StringVar(&f.configFile)
-	app.Flag("web.telemetry-path", "Path of the metrics about the exporter itself.").Default("/metrics").StringVar(&f.telemetryPath)
-	app.Flag("exporter.metrics-path", "Path of the PrusaLink metrics.").Default("/metrics/prusalink").StringVar(&f.prusaLinkPath)
-	app.Flag("exporter.udp-metrics-path", "Path of the UDP metrics.").Default("/metrics/udp").StringVar(&f.udpPath)
-	app.Flag("udp.listen-address", "UDP address for the metrics of the printers.").Default(":8514").StringVar(&f.udpListen)
-	app.Flag("udp.prefix", "Prefix of the UDP metric names.").Default("prusa_").StringVar(&f.udpPrefix)
-	app.Flag("udp.gcode-enabled", "At start, send a G-code to each printer that enables its UDP metrics to this exporter.").Default("true").BoolVar(&f.gcodeEnabled)
-	app.Flag("udp.ip-override", "Address of the exporter in the G-code. Default: the local address of the route to the printer.").PlaceHolder("ADDRESS").StringVar(&f.gcodeHost)
-	app.Flag("udp.all-metrics", "Enable all UDP metrics in the G-code. This makes the printer slow.").BoolVar(&f.gcodeAll)
-	app.Flag("udp.extra-metrics", "A UDP metric to enable in the G-code, in addition to the default metrics. Repeat the flag for more metrics.").PlaceHolder("METRIC").StringsVar(&f.gcodeExtra)
-	app.Flag("loki.push-url", "Loki push URL for the job thumbnail, for example http://loki:3100/loki/api/v1/push. Empty disables the push.").PlaceHolder("URL").StringVar(&f.lokiPushURL)
-	app.Flag("web.enable-pprof", "Serve the Go profiles on /debug/pprof/. Protect them with --web.config.file if the address is not private.").BoolVar(&f.enablePprof)
-	f.webFlags = kingpinflag.AddFlags(app, ":10009")
-	promslogflag.AddFlags(app, &f.promslogConfig)
-	app.Version(version.Print(name))
-	app.HelpFlag.Short('h')
-	app.Validate(func(*kingpin.Application) error {
-		paths := map[string]bool{f.telemetryPath: true, f.prusaLinkPath: true, f.udpPath: true}
-		if len(paths) != 3 || paths["/"] {
-			return errors.New("the telemetry, PrusaLink and UDP paths must be different, and not \"/\"")
-		}
-		return nil
-	})
-	if _, err := app.Parse(args); err != nil {
-		return nil, err //nolint:wrapcheck // kingpin errors are messages for the user, in the kingpin format.
+// cli has the command-line flags. The names are the flag names of prusa_exporter 2.x,
+// which used kingpin, and the web and log flags of exporter-toolkit and promslog.
+type cli struct {
+	ConfigFile    string   `name:"config.file" default:"prusa.yml" help:"Path of the configuration file."`
+	TelemetryPath string   `name:"web.telemetry-path" default:"/metrics" help:"Path of the metrics about the exporter itself."`
+	PrusaLinkPath string   `name:"exporter.metrics-path" default:"/metrics/prusalink" help:"Path of the PrusaLink metrics."`
+	UDPPath       string   `name:"exporter.udp-metrics-path" default:"/metrics/udp" help:"Path of the UDP metrics."`
+	UDPListen     string   `name:"udp.listen-address" default:":8514" help:"UDP address for the metrics of the printers."`
+	UDPPrefix     string   `name:"udp.prefix" default:"prusa_" help:"Prefix of the UDP metric names."`
+	GcodeEnabled  bool     `name:"udp.gcode-enabled" default:"true" negatable:"" help:"At start, send a G-code to each printer that enables its UDP metrics to this exporter."`
+	GcodeHost     string   `name:"udp.ip-override" placeholder:"ADDRESS" help:"Address of the exporter in the G-code. Default: the local address of the route to the printer."`
+	GcodeAll      bool     `name:"udp.all-metrics" help:"Enable all UDP metrics in the G-code. This makes the printer slow."`
+	GcodeExtra    []string `name:"udp.extra-metrics" placeholder:"METRIC" sep:"none" help:"A UDP metric to enable in the G-code, in addition to the default metrics. Repeat the flag for more metrics."`
+	LokiPushURL   string   `name:"loki.push-url" placeholder:"URL" help:"Loki push URL for the job thumbnail, for example http://loki:3100/loki/api/v1/push. Empty disables the push."`
+	EnablePprof   bool     `name:"web.enable-pprof" help:"Serve the Go profiles on /debug/pprof/. Protect them with --web.config.file if the address is not private."`
+
+	// The flags of exporter-toolkit (web/kingpinflag) and promslog (promslog/flag).
+	WebListen        []string `name:"web.listen-address" default:":10009" sep:"none" help:"Addresses on which to expose metrics and web interface. Repeatable for multiple addresses. Examples: :9100 or [::1]:9100 for http, vsock://:9100 for vsock."`
+	WebSystemdSocket bool     `name:"web.systemd-socket" help:"Use systemd socket activation listeners instead of port listeners (Linux only)."`
+	WebConfigFile    string   `name:"web.config.file" help:"Path to configuration file that can enable TLS or authentication. See: https://github.com/prometheus/exporter-toolkit/blob/master/docs/web-configuration.md"`
+	LogLevel         string   `name:"log.level" default:"info" enum:"${log_levels}" help:"Only log messages with the given severity or above. One of: [${log_levels}]"`
+	LogFormat        string   `name:"log.format" default:"logfmt" enum:"${log_formats}" help:"Output format of log messages. One of: [${log_formats}]"`
+
+	Version kong.VersionFlag `help:"Show the version."`
+}
+
+// Validate implements the kong.Validatable interface.
+func (c *cli) Validate() error {
+	paths := map[string]bool{c.TelemetryPath: true, c.PrusaLinkPath: true, c.UDPPath: true}
+	if len(paths) != 3 || paths["/"] {
+		return errors.New("the telemetry, PrusaLink and UDP paths must be different, and not \"/\"")
+	}
+	if c.WebSystemdSocket && runtime.GOOS != "linux" {
+		return errors.New("--web.systemd-socket works only on Linux")
+	}
+	return nil
+}
+
+// parseFlags parses the command-line arguments. For --help and --version, kong writes
+// to stdout and exits.
+func parseFlags(args []string) (*flags, error) {
+	var c cli
+	parser, err := kong.New(&c,
+		kong.Name(name),
+		kong.Description("Prometheus exporter for Prusa printers."),
+		kong.Vars{
+			"version":     version.Print(name),
+			"log_levels":  strings.Join(promslog.LevelFlagOptions, ","),
+			"log_formats": strings.Join(promslog.FormatFlagOptions, ","),
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("flag definitions: %w", err)
+	}
+	if _, err := parser.Parse(args); err != nil {
+		return nil, err //nolint:wrapcheck // kong errors are messages for the user.
+	}
+	f := &flags{
+		configFile:    c.ConfigFile,
+		telemetryPath: c.TelemetryPath,
+		prusaLinkPath: c.PrusaLinkPath,
+		udpPath:       c.UDPPath,
+		udpListen:     c.UDPListen,
+		udpPrefix:     c.UDPPrefix,
+		gcodeEnabled:  c.GcodeEnabled,
+		gcodeHost:     c.GcodeHost,
+		gcodeAll:      c.GcodeAll,
+		gcodeExtra:    c.GcodeExtra,
+		lokiPushURL:   c.LokiPushURL,
+		enablePprof:   c.EnablePprof,
+		webFlags: &web.FlagConfig{
+			WebListenAddresses: &c.WebListen,
+			WebSystemdSocket:   &c.WebSystemdSocket,
+			WebConfigFile:      &c.WebConfigFile,
+		},
+		promslogConfig: promslog.Config{Level: promslog.NewLevel(), Format: promslog.NewFormat()},
+	}
+	// The enum tags allow only the values that Set accepts.
+	if err := f.promslogConfig.Level.Set(c.LogLevel); err != nil {
+		return nil, fmt.Errorf("--log.level: %w", err)
+	}
+	if err := f.promslogConfig.Format.Set(c.LogFormat); err != nil {
+		return nil, fmt.Errorf("--log.format: %w", err)
 	}
 	return f, nil
 }
 
 func main() {
-	app := kingpin.New(name, "Prometheus exporter for Prusa printers.")
-	f, err := parseFlags(app, os.Args[1:])
-	app.FatalIfError(err, "")
+	f, err := parseFlags(os.Args[1:])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s: error: %v\n", name, err)
+		os.Exit(2)
+	}
 	logger := logging.New(&f.promslogConfig, os.Stderr, name, version.Version)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	err = run(ctx, f, logger)

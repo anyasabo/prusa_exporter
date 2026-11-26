@@ -9,11 +9,10 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/alecthomas/kingpin/v2"
 )
 
 func TestParseFlags(t *testing.T) {
@@ -32,15 +31,81 @@ func TestParseFlags(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			app := kingpin.New(name, "")
-			app.Terminate(nil)
-			app.UsageWriter(io.Discard)
-			app.ErrorWriter(io.Discard)
-			_, err := parseFlags(app, tt.args)
+			_, err := parseFlags(tt.args)
 			if (err != nil) != tt.isErr {
 				t.Errorf("parseFlags(%v) error = %v, want error %v", tt.args, err, tt.isErr)
 			}
 		})
+	}
+}
+
+// TestParseFlagValues records the value of each flag, so that a change of the flag
+// library keeps the names, the defaults and the "--no-" form of the boolean flags.
+func TestParseFlagValues(t *testing.T) {
+	t.Parallel()
+	type values struct {
+		configFile, telemetryPath, prusaLinkPath, udpPath, udpListen, udpPrefix string
+		gcodeEnabled                                                            bool
+		gcodeHost                                                               string
+		gcodeAll                                                                bool
+		gcodeExtra                                                              []string
+		lokiPushURL                                                             string
+		enablePprof                                                             bool
+		listen                                                                  []string
+		systemdSocket                                                           bool
+		webConfigFile, logLevel, logFormat                                      string
+	}
+	get := func(f *flags) values {
+		return values{
+			f.configFile, f.telemetryPath, f.prusaLinkPath, f.udpPath, f.udpListen, f.udpPrefix,
+			f.gcodeEnabled, f.gcodeHost, f.gcodeAll, f.gcodeExtra, f.lokiPushURL, f.enablePprof,
+			*f.webFlags.WebListenAddresses, *f.webFlags.WebSystemdSocket, *f.webFlags.WebConfigFile,
+			f.promslogConfig.Level.String(), f.promslogConfig.Format.String(),
+		}
+	}
+	defaults := values{
+		configFile: "prusa.yml", telemetryPath: "/metrics", prusaLinkPath: "/metrics/prusalink",
+		udpPath: "/metrics/udp", udpListen: ":8514", udpPrefix: "prusa_", gcodeEnabled: true,
+		listen: []string{":10009"}, logLevel: "info", logFormat: "logfmt",
+	}
+	all := values{
+		configFile: "c.yml", telemetryPath: "/t", prusaLinkPath: "/p", udpPath: "/u",
+		udpListen: ":1", udpPrefix: "x_", gcodeEnabled: false, gcodeHost: "10.0.0.1", gcodeAll: true,
+		gcodeExtra: []string{"a", "b"}, lokiPushURL: "http://loki/push", enablePprof: true,
+		listen: []string{":1", ":2"}, systemdSocket: true, webConfigFile: "w.yml", logLevel: "debug", logFormat: "json",
+	}
+	tests := []struct {
+		name string
+		args []string
+		want values
+	}{
+		{"defaults", nil, defaults},
+		{"all", []string{
+			"--config.file=c.yml", "--web.telemetry-path=/t", "--exporter.metrics-path=/p",
+			"--exporter.udp-metrics-path=/u", "--udp.listen-address=:1", "--udp.prefix=x_",
+			"--no-udp.gcode-enabled", "--udp.ip-override=10.0.0.1", "--udp.all-metrics",
+			"--udp.extra-metrics=a", "--udp.extra-metrics", "b", "--loki.push-url=http://loki/push",
+			"--web.enable-pprof", "--web.listen-address=:1", "--web.listen-address=:2",
+			"--web.systemd-socket", "--web.config.file=w.yml", "--log.level=debug", "--log.format=json",
+		}, all},
+		{"gcode enabled", []string{"--udp.gcode-enabled"}, defaults},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			f, err := parseFlags(tt.args)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := get(f); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("parseFlags(%q):\ngot  %+v\nwant %+v", tt.args, got, tt.want)
+			}
+		})
+	}
+	for _, args := range [][]string{{"--log.level=trace"}, {"--log.format=xml"}, {"--udp.gcode-enabled=maybe"}} {
+		if _, err := parseFlags(args); err == nil {
+			t.Errorf("parseFlags(%q): no error", args)
+		}
 	}
 }
 
@@ -142,8 +207,7 @@ func TestRun(t *testing.T) {
 
 func TestRunBadConfig(t *testing.T) {
 	t.Parallel()
-	app := kingpin.New(name, "")
-	f, err := parseFlags(app, []string{"--config.file=" + filepath.Join(t.TempDir(), "missing.yml")})
+	f, err := parseFlags([]string{"--config.file=" + filepath.Join(t.TempDir(), "missing.yml")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +227,7 @@ func startExporter(t *testing.T, cfg string, args ...string) (base, udpAddr stri
 	}
 	httpAddr := freePort(t, "tcp")
 	udpAddr = freePort(t, "udp")
-	f, err := parseFlags(kingpin.New(name, ""), append([]string{
+	f, err := parseFlags(append([]string{
 		"--config.file=" + cfgFile,
 		"--web.listen-address=" + httpAddr,
 		"--udp.listen-address=" + udpAddr,

@@ -36,7 +36,7 @@ the ko base image digest in `.goreleaser.yaml`.
 
 ## Architecture
 
-`main.go` parses the kingpin flags, loads `prusa.yml` (`internal/config`) and starts two
+`main.go` parses the flags (kong, with the flag names of kingpin and exporter-toolkit), loads `prusa.yml` (`internal/config`) and starts two
 independent data paths. Each path has its own HTTP endpoint and registry:
 
 | Endpoint | Data | Source |
