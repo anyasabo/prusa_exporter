@@ -3,6 +3,7 @@ package udp
 import (
 	"errors"
 	"strings"
+	"unicode/utf8"
 )
 
 // parseMessage parses the syslog header of one datagram of the printer. The Buddy
@@ -39,6 +40,10 @@ func parseMessage(data string) (hostname, lines string, err error) {
 	if fields[1] == "-" || fields[1] == "" {
 		return "", "", errNoHostname
 	}
+	// The hostname becomes the label printer_mac, and a label value must be valid UTF-8.
+	if !utf8.ValidString(fields[1]) {
+		return "", "", errHostnameUTF8
+	}
 
 	// The body starts with "msg=ID,tm=TIME,v=4 ", then the first point.
 	header, body, ok := strings.Cut(rest, " ")
@@ -65,5 +70,6 @@ var (
 	errShortHeader    = errors.New("syslog header is too short")
 	errStructuredData = errors.New("structured data is not supported")
 	errNoHostname     = errors.New("syslog message has no hostname")
+	errHostnameUTF8   = errors.New("syslog hostname is not valid UTF-8")
 	errNoMsgHeader    = errors.New("body has no msg= header")
 )

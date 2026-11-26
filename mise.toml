@@ -58,7 +58,7 @@ run = "go test -race -shuffle=on -coverprofile=coverage.out ./..."
 [tasks.fuzz]
 description = "Run each fuzz test for a short time (FUZZTIME, default 30s)"
 run = '''
-for f in FuzzParsePoint FuzzParseMessage; do
+for f in FuzzParsePoint FuzzParseMessage FuzzHandleGather; do
   go test -run '^$' -fuzz "^$f\$" -fuzztime "${FUZZTIME:-30s}" -parallel 2 ./internal/udp
 done
 '''

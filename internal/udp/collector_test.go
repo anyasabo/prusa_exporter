@@ -220,6 +220,36 @@ func TestCollectorInvalidMessage(t *testing.T) {
 	}
 }
 
+// TestCollectorInvalidUTF8 sends values that are not valid UTF-8 where they become a
+// label value of the printer metrics. A label value must be valid UTF-8: before the fix,
+// Collect panicked at each scrape, and the series of all printers were lost.
+func TestCollectorInvalidUTF8(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name        string
+		datagram    []byte
+		wantInvalid float64
+	}{
+		{"hostname", []byte("<14>1 - \xff\xfe buddy - - - msg=1,tm=1,v=4 a v=1 0\n"), 1},
+		{"error point name", msg("\xffname error=\"x\" 0"), 0},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			c, _ := newTestCollector(t, Options{})
+			c.Handle(t.Context(), msg("good v=1 0"), printer, t0)
+			c.Handle(t.Context(), tt.datagram, printer, t0)
+			reg := prometheus.NewPedanticRegistry()
+			reg.MustRegister(c)
+			if _, err := reg.Gather(); err != nil {
+				t.Errorf("Gather: %v", err)
+			}
+			if got := testutil.ToFloat64(c.metrics.invalidMessages); got != tt.wantInvalid {
+				t.Errorf("invalid messages = %v, want %v", got, tt.wantInvalid)
+			}
+		})
+	}
+}
+
 func TestCollectorConcurrent(t *testing.T) {
 	t.Parallel()
 	c, _ := newTestCollector(t, Options{SeriesTTL: time.Nanosecond})
@@ -277,4 +307,23 @@ prusa_temp_noz{printer_address="127.0.0.1",printer_mac="AA:BB"} 200
 	case <-time.After(5 * time.Second):
 		t.Fatal("Serve() did not return after cancel")
 	}
+}
+
+// FuzzHandleGather sends any datagram to Handle. Then the exposition must have no error:
+// a label value that is not valid UTF-8, a name that is not valid or a duplicate series
+// makes Gather fail, and a client_golang version with no panic recovery would crash.
+func FuzzHandleGather(f *testing.F) {
+	f.Add(msg("temp_noz v=215.5 0", "fan rpm=1i,pwm=2i 10", `s v="x" 0`, "e v=T 0", `n error="x" 0`, "t,a=b v=1 0"))
+	f.Add([]byte("<14>1 - \xff buddy - - - msg=1,tm=1,v=4 a v=1 0\n"))
+	f.Add(msg("\xff error=\"x\" 0", "a,\xff=b v=1 0", `s v="\xff" 0`))
+	f.Fuzz(func(t *testing.T, data []byte) {
+		c, _ := newTestCollector(t, Options{EventMetrics: []string{"e"}})
+		c.Handle(t.Context(), msg("good v=1 0"), printer, t0)
+		c.Handle(t.Context(), data, printer, t0)
+		reg := prometheus.NewPedanticRegistry()
+		reg.MustRegister(c)
+		if _, err := reg.Gather(); err != nil {
+			t.Fatalf("Gather after %q: %v", data, err)
+		}
+	})
 }

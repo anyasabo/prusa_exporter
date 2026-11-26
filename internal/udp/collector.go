@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -196,14 +197,24 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 	defer c.mu.Unlock()
 
 	c.expire()
+	// Handle checks the label values from the datagrams. NewConstMetric, not
+	// MustNewConstMetric, so that a value that passes the check by error cannot panic.
+	send := func(desc *prometheus.Desc, t prometheus.ValueType, v float64, labels ...string) {
+		m, err := prometheus.NewConstMetric(desc, t, v, labels...)
+		if err != nil {
+			c.warnOnce(desc.String(), "Cannot expose a UDP printer metric", logging.ErrorMessage, err)
+			return
+		}
+		ch <- m
+	}
 	for k, st := range c.printers {
-		ch <- prometheus.MustNewConstMetric(lastPushDesc, prometheus.GaugeValue, float64(st.lastPush.UnixNano())/1e9, k.mac, st.address)
-		ch <- prometheus.MustNewConstMetric(packetsDesc, prometheus.CounterValue, st.packets, k.mac, st.address)
-		ch <- prometheus.MustNewConstMetric(pointsDesc, prometheus.CounterValue, st.points, k.mac, st.address)
-		ch <- prometheus.MustNewConstMetric(pointErrorsAllDesc, prometheus.CounterValue, st.errors, k.mac, st.address)
+		send(lastPushDesc, prometheus.GaugeValue, float64(st.lastPush.UnixNano())/1e9, k.mac, st.address)
+		send(packetsDesc, prometheus.CounterValue, st.packets, k.mac, st.address)
+		send(pointsDesc, prometheus.CounterValue, st.points, k.mac, st.address)
+		send(pointErrorsAllDesc, prometheus.CounterValue, st.errors, k.mac, st.address)
 	}
 	for k, n := range c.pointErrors {
-		ch <- prometheus.MustNewConstMetric(pointErrorsDesc, prometheus.CounterValue, *n, k.metric, k.mac, c.printers[k.printerKey].address)
+		send(pointErrorsDesc, prometheus.CounterValue, *n, k.metric, k.mac, c.printers[k.printerKey].address)
 	}
 	for _, s := range c.series {
 		m, err := prometheus.NewConstMetric(s.desc, s.family.kind.valueType(), s.value, s.labelValues...)
@@ -371,6 +382,11 @@ func (c *Collector) record(ctx context.Context, mac string, addr netip.Addr, poi
 	for i := range points {
 		p := &points[i]
 		if msg, ok := errorMessage(p); ok {
+			if !utf8.ValidString(p.Name) {
+				// The name becomes the label "metric", which must be valid UTF-8.
+				dropped++
+				continue
+			}
 			// The firmware sends "name error=\"...\"" when it cannot record a value.
 			ek := errorKey{p.Name, pk}
 			n := c.pointErrors[ek]
