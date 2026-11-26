@@ -159,14 +159,15 @@ func run(ctx context.Context, f *flags, logger *slog.Logger) error {
 	mux := http.NewServeMux()
 	httpDuration := prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "prusa_exporter_http_request_duration_seconds",
-		Help:    "Duration of the HTTP requests to the PrusaLink and UDP metrics endpoints.",
+		Help:    "Duration of the HTTP requests to the metrics endpoints of the exporter.",
 		Buckets: []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
 	}, []string{"handler", "code"})
 	self.MustRegister(httpDuration)
 	instrument := func(handler string, h http.Handler) http.Handler {
 		return promhttp.InstrumentHandlerDuration(httpDuration.MustCurryWith(prometheus.Labels{"handler": handler}), h)
 	}
-	mux.Handle(f.telemetryPath, promhttp.InstrumentMetricHandler(self, promhttp.HandlerFor(self, promhttp.HandlerOpts{})))
+	// Only the metrics endpoints: pprof requests can last 30 s, and nothing scrapes the landing page.
+	mux.Handle(f.telemetryPath, instrument("metrics", promhttp.InstrumentMetricHandler(self, promhttp.HandlerFor(self, promhttp.HandlerOpts{}))))
 	mux.Handle(f.prusaLinkPath, instrument("prusalink", plExporter.Handler()))
 	mux.Handle(f.udpPath, instrument("udp", promhttp.HandlerFor(udpRegistry, promhttp.HandlerOpts{
 		ErrorLog:      slog.NewLogLogger(logger.Handler(), slog.LevelError),

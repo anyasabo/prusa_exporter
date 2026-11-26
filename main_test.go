@@ -118,6 +118,8 @@ func TestRun(t *testing.T) {
 		{"/metrics", "prusa_exporter_build_info{"},
 		{"/metrics", "go_goroutines "},
 		{"/metrics", `prusa_exporter_prusalink_request_duration_seconds_count{code="200",endpoint="/api/v1/status"`},
+		// The earlier GET /metrics requests of this list are in the histogram.
+		{"/metrics", `prusa_exporter_http_request_duration_seconds_count{code="200",handler="metrics"}`},
 		{"/", "Exporter metrics"},
 		{"/debug/pprof/", "goroutine"},
 	} {

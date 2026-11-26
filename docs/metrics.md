@@ -52,7 +52,7 @@ The metrics of the exporter itself. The endpoint also has the standard `go_*`, `
 | Metric | Type | Labels | Description |
 | --- | --- | --- | --- |
 | `prusa_exporter_build_info` | gauge | `branch`, `goarch`, `goos`, `goversion`, `revision`, `tags`, `version` | A metric with a constant '1' value labeled by version, revision, branch, goversion from which prusa_exporter was built, and the goos and goarch for the build. |
-| `prusa_exporter_http_request_duration_seconds` | histogram | `code`, `handler` | Duration of the HTTP requests to the PrusaLink and UDP metrics endpoints. |
+| `prusa_exporter_http_request_duration_seconds` | histogram | `code`, `handler` | Duration of the HTTP requests to the metrics endpoints of the exporter. |
 | `prusa_exporter_loki_pushes_total` | counter | `result` | Number of job thumbnail pushes to Loki, by result. |
 | `prusa_exporter_prusalink_handler_errors_total` | counter |  | Number of errors of the PrusaLink metrics handler while it gathered or encoded metrics. |
 | `prusa_exporter_prusalink_request_duration_seconds` | histogram | `code`, `endpoint`, `printer_address` | Duration of the HTTP requests to PrusaLink, including the digest challenges. |
