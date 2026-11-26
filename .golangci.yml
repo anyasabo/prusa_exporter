@@ -6,9 +6,8 @@ linters:
   default: all
   disable:
     # Style rules that the Go ecosystem does not use widely.
-    - embeddedstructfieldcheck # The order of struct fields.
-    - exhaustruct # Each struct literal must set each field.
-    - exhaustruct_v5
+    # exhaustruct_v5 is on only for the Options types: see its settings.
+    - exhaustruct # Deprecated: exhaustruct_v5 replaces it.
     - funcorder # The order of methods in a file.
     - lll # The line length. gofumpt formats the code.
     - nlreturn # A blank line before each return.
@@ -34,6 +33,12 @@ linters:
     - funlen
     - gocognit
   settings:
+    exhaustruct_v5:
+      # run() in main.go copies each setting of the config into these structs. A new
+      # field that run() does not set would be a setting that does nothing.
+      explicit-mode: true
+      enforce-patterns:
+        - '^github\.com/anyasabo/prusa_exporter/v3/internal/.+\.(Gcode)?Options$'
     nolintlint:
       require-explanation: true
       require-specific: true
@@ -61,6 +66,11 @@ linters:
   exclusions:
     presets:
       - std-error-handling
+    rules:
+      # The tests set only the options that they test.
+      - path: _test\.go
+        linters:
+          - exhaustruct_v5
 
 formatters:
   enable:

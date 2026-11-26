@@ -118,8 +118,9 @@ type printerStats struct {
 }
 
 type errorKey struct {
-	metric string
 	printerKey
+
+	metric string
 }
 
 // Options are the settings of a Collector.
@@ -407,7 +408,7 @@ func (c *Collector) record(ctx context.Context, mac string, addr netip.Addr, poi
 				continue
 			}
 			// The firmware sends "name error=\"...\"" when it cannot record a value.
-			ek := errorKey{p.Name, pk}
+			ek := errorKey{printerKey: pk, metric: p.Name}
 			n := c.pointErrors[ek]
 			if n == nil {
 				n = new(float64)

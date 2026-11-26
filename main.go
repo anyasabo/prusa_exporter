@@ -167,6 +167,10 @@ func run(ctx context.Context, f *flags, logger *slog.Logger) error {
 	for _, key := range cfg.Deprecated() {
 		logger.Warn("The configuration file has a deprecated key. The exporter ignores it.", logging.ConfigKey, key)
 	}
+	for _, addr := range cfg.NotIPAddresses() {
+		logger.Warn("The printer address is not a plain IP address. The PrusaLink and UDP series of this printer have different printer_address labels, so the alert rules that compare them do not work.",
+			logging.PrinterAddress, addr)
+	}
 
 	// The registry of the exporter itself.
 	self := prometheus.NewRegistry()
@@ -183,13 +187,15 @@ func run(ctx context.Context, f *flags, logger *slog.Logger) error {
 	for i, p := range cfg.Printers {
 		targets[i] = &prusalink.Target{Client: prusalink.NewClient(p, transport, clientMetrics)}
 	}
+	var loki *prusalink.LokiPusher
+	if f.lokiPushURL != "" {
+		loki = prusalink.NewLokiPusher(f.lokiPushURL, self)
+	}
 	opts := prusalink.Options{
 		CommonLabels:   cfg.PrusaLink.CommonLabels,
 		DisableMetrics: cfg.PrusaLink.DisableMetrics,
 		Budget:         cfg.Exporter.PrusaLinkScrapeBudget,
-	}
-	if f.lokiPushURL != "" {
-		opts.Loki = prusalink.NewLokiPusher(f.lokiPushURL, self)
+		Loki:           loki,
 	}
 	plExporter := prusalink.NewExporter(targets, opts, logger, self)
 
