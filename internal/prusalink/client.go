@@ -10,6 +10,7 @@ import (
 	"io"
 	"maps"
 	"net/http"
+	"net/netip"
 	"strconv"
 	"time"
 
@@ -118,7 +119,12 @@ func NewClient(p config.Printer, base http.RoundTripper, metrics *ClientMetrics)
 }
 
 func (c *Client) url(path string) string {
-	return "http://" + c.Printer.Address + path
+	host := c.Printer.Address
+	if a, err := netip.ParseAddr(host); err == nil && a.Is6() {
+		// A URL needs brackets around an IPv6 address. An address with a port has them.
+		host = "[" + host + "]"
+	}
+	return "http://" + host + path
 }
 
 // Do sends a request and returns the body of a 2xx response. endpoint is the value of

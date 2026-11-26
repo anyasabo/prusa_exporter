@@ -168,7 +168,7 @@ func run(ctx context.Context, f *flags, logger *slog.Logger) error {
 		logger.Warn("The configuration file has a deprecated key. The exporter ignores it.", logging.ConfigKey, key)
 	}
 	for _, addr := range cfg.NotIPAddresses() {
-		logger.Warn("The printer address is not a plain IP address. The PrusaLink and UDP series of this printer have different printer_address labels, so the alert rules that compare them do not work.",
+		logger.Warn("The printer address is not a plain IP address in its short form. The PrusaLink and UDP series of this printer have different printer_address labels, so the alert rules that compare them do not work.",
 			logging.PrinterAddress, addr)
 	}
 

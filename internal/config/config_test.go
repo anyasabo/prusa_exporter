@@ -143,11 +143,16 @@ func TestNotIPAddresses(t *testing.T) {
   - {address: printer.lan, apikey: k}
   - {address: "192.168.1.11:8080", apikey: k}
   - {address: "[fd00::11]:80", apikey: k}
+  - {address: "[fd00::12]", apikey: k}
+  - {address: "FD00::0013", apikey: k}
+  - {address: "::ffff:192.168.1.12", apikey: k}
+  - {address: "fe80::1%eth0", apikey: k}
 `))
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"printer.lan", "192.168.1.11:8080", "[fd00::11]:80"}
+	// The UDP label is the canonical form of the source IP: netip.Addr.Unmap().String().
+	want := []string{"printer.lan", "192.168.1.11:8080", "[fd00::11]:80", "[fd00::12]", "FD00::0013", "::ffff:192.168.1.12", "fe80::1%eth0"}
 	if got := c.NotIPAddresses(); !reflect.DeepEqual(got, want) {
 		t.Errorf("NotIPAddresses() = %v, want %v", got, want)
 	}

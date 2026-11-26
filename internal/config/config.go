@@ -226,14 +226,16 @@ func (c *Config) Deprecated() []string {
 	return keys
 }
 
-// NotIPAddresses returns the printer addresses that are not a plain IP address, for
-// example a host name or an address with a port. The PrusaLink series of such a
-// printer cannot be matched with its UDP series: on the UDP series, the label
-// printer_address is the source IP of the datagram.
+// NotIPAddresses returns the printer addresses that are not a plain IP address in its
+// canonical form, for example a host name, an address with a port or brackets, or
+// "::ffff:192.168.1.10". The PrusaLink series of such a printer cannot be matched with
+// its UDP series: on the UDP series, the label printer_address is the source IP of the
+// datagram, in the form of netip.Addr.Unmap().String().
 func (c *Config) NotIPAddresses() []string {
 	var addrs []string
 	for _, p := range c.Printers {
-		if _, err := netip.ParseAddr(p.Address); err != nil {
+		a, err := netip.ParseAddr(p.Address)
+		if err != nil || a.Zone() != "" || a.Unmap().String() != p.Address {
 			addrs = append(addrs, p.Address)
 		}
 	}
