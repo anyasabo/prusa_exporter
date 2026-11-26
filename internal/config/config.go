@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/netip"
 	"os"
 	"slices"
 	"time"
@@ -130,6 +131,7 @@ type PrusaLink struct {
 // Printer is one printer in prusa.yml.
 type Printer struct {
 	// Address is the host and an optional port of PrusaLink, for example "192.168.1.10".
+	// The alert rules that compare PrusaLink and UDP need a plain IP address (NotIPAddresses).
 	Address  string `yaml:"address"`
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
@@ -221,4 +223,18 @@ func (c *Config) Deprecated() []string {
 		keys = append(keys, "exporter.log_level")
 	}
 	return keys
+}
+
+// NotIPAddresses returns the printer addresses that are not a plain IP address, for
+// example a host name or an address with a port. The PrusaLink series of such a
+// printer cannot be matched with its UDP series: on the UDP series, the label
+// printer_address is the source IP of the datagram.
+func (c *Config) NotIPAddresses() []string {
+	var addrs []string
+	for _, p := range c.Printers {
+		if _, err := netip.ParseAddr(p.Address); err != nil {
+			addrs = append(addrs, p.Address)
+		}
+	}
+	return addrs
 }

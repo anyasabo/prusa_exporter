@@ -12,6 +12,11 @@ groups:
           summary: "{{ $labels.printer_name }} is in the state {{ $labels.printer_state }}"
           description: "The printer waits for a person. Look at its display."
 
+      # The next two rules match the PrusaLink and the UDP series of a printer by
+      # printer_address. On the UDP series, it is the source IP of the datagrams. Thus
+      # the address of the printer in prusa.yml must be a plain IP address, with no host
+      # name and no port. If it is not, the exporter logs a warning at the start.
+
       # The printer is on (it sends UDP metrics), but PrusaLink does not answer.
       - alert: PrusaLinkScrapeFailing
         expr: |

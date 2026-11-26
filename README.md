@@ -118,6 +118,8 @@ I've prepared quick guide where you can learn how to get credentials and IP addr
 
 [alerts/prusa_exporter.rules.yml](alerts/prusa_exporter.rules.yml) has alert rules for Prometheus or vmalert. They use only the metrics of the exporter: a printer that waits for a person, PrusaLink that fails while the printer is on, UDP metrics that stop, slow scrapes, and errors of the exporter. `mise run test-alerts` runs their unit tests.
 
+`PrusaLinkScrapeFailing` and `PrusaUDPMetricsStopped` compare the PrusaLink series and the UDP series of a printer by the label `printer_address`. On the UDP series, this label is the source IP of the datagrams. Thus these two rules work only if the `address` of the printer in `prusa.yml` is a plain IP address, with no host name and no port. If it is not, the exporter logs a warning at the start.
+
 ## Running
 
 ### Docker

@@ -133,6 +133,26 @@ func TestDeprecated(t *testing.T) {
 	}
 }
 
+// TestNotIPAddresses lists the printers whose PrusaLink series and UDP series cannot be
+// matched: the UDP label printer_address is always the source IP of the datagram.
+func TestNotIPAddresses(t *testing.T) {
+	t.Parallel()
+	c, err := Parse([]byte(`printers:
+  - {address: 192.168.1.10, apikey: k}
+  - {address: "fd00::10", apikey: k}
+  - {address: printer.lan, apikey: k}
+  - {address: "192.168.1.11:8080", apikey: k}
+  - {address: "[fd00::11]:80", apikey: k}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"printer.lan", "192.168.1.11:8080", "[fd00::11]:80"}
+	if got := c.NotIPAddresses(); !reflect.DeepEqual(got, want) {
+		t.Errorf("NotIPAddresses() = %v, want %v", got, want)
+	}
+}
+
 func TestLoad(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "prusa.yml")
