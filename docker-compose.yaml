@@ -8,7 +8,7 @@ volumes:
 
 services:
   grafana:
-    image: grafana/grafana:12.2
+    image: grafana/grafana:12.2@sha256:d2ac2dae86601550e941f7e1c0b4b7e1f21fadebfa5956ba06fe0b3a64de7cf4
     container_name: grafana
     restart: unless-stopped
     environment:
@@ -26,7 +26,7 @@ services:
       - grafana_data:/var/lib/grafana
 
   exporter:
-    image: ghcr.io/anyasabo/prusa_exporter:latest
+    image: ghcr.io/anyasabo/prusa_exporter:latest@sha256:ce62bf0e696f54dedf663a8c8d239864eb408bf4ab5876d6ef62248f5a0c103a
     container_name: exporter
     restart: unless-stopped
     volumes:
@@ -49,7 +49,7 @@ services:
       - pubel
 
   prometheus:
-    image: prom/prometheus:v3.7.3
+    image: prom/prometheus:v3.7.3@sha256:49214755b6153f90a597adcbff0252cc61069f8ab69ce8411285cd4a560e8038
     container_name: prometheus
     restart: always
     command:
@@ -64,7 +64,7 @@ services:
       - pubel
 
   loki:
-    image: grafana/loki:3.5.8
+    image: grafana/loki:3.5.8@sha256:00981fd9455db8589c3aa6d06744af3138c4b2c32fdec62101e92c7a704b2642
     container_name: loki
     restart: unless-stopped
     command: -config.file=/etc/loki/loki.yaml
