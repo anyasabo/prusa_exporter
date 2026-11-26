@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/alecthomas/kong"
 )
 
 func TestParseFlags(t *testing.T) {
@@ -89,6 +91,16 @@ func TestParseFlagValues(t *testing.T) {
 			"--web.systemd-socket", "--web.config.file=w.yml", "--log.level=debug", "--log.format=json",
 		}, all},
 		{"gcode enabled", []string{"--udp.gcode-enabled"}, defaults},
+		// kingpin accepted "--no-" for each boolean flag.
+		{"no booleans", []string{"--no-udp.all-metrics", "--no-web.enable-pprof", "--no-web.systemd-socket"}, defaults},
+		// promslog.Level.Set accepts upper case. promslog.Format.Set does not.
+		{"upper-case log level", []string{"--log.level=INFO"}, defaults},
+		// A comma is part of the value: there is no list separator.
+		{"comma in a repeatable flag", []string{"--udp.extra-metrics=a,b", "--web.listen-address=:1,:2"}, func() values {
+			v := defaults
+			v.gcodeExtra, v.listen = []string{"a,b"}, []string{":1,:2"}
+			return v
+		}()},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -105,6 +117,23 @@ func TestParseFlagValues(t *testing.T) {
 	for _, args := range [][]string{{"--log.level=trace"}, {"--log.format=xml"}, {"--udp.gcode-enabled=maybe"}} {
 		if _, err := parseFlags(args); err == nil {
 			t.Errorf("parseFlags(%q): no error", args)
+		}
+	}
+}
+
+// TestHelpAndVersion checks that --help and --version print to stdout and exit with 0.
+func TestHelpAndVersion(t *testing.T) {
+	t.Parallel()
+	for _, arg := range []string{"--help", "-h", "--version"} {
+		var out strings.Builder
+		code := -1
+		func() {
+			// kong calls Exit and does not expect it to return. The panic stops the parse.
+			defer func() { _ = recover() }()
+			_, _ = parseFlags([]string{arg}, kong.Writers(&out, io.Discard), kong.Exit(func(c int) { code = c; panic(arg) }))
+		}()
+		if code != 0 || !strings.Contains(out.String(), name) {
+			t.Errorf("%s: exit code %d, output %q", arg, code, out.String())
 		}
 	}
 }

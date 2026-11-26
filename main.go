@@ -65,17 +65,17 @@ type cli struct {
 	UDPPrefix     string   `name:"udp.prefix" default:"prusa_" help:"Prefix of the UDP metric names."`
 	GcodeEnabled  bool     `name:"udp.gcode-enabled" default:"true" negatable:"" help:"At start, send a G-code to each printer that enables its UDP metrics to this exporter."`
 	GcodeHost     string   `name:"udp.ip-override" placeholder:"ADDRESS" help:"Address of the exporter in the G-code. Default: the local address of the route to the printer."`
-	GcodeAll      bool     `name:"udp.all-metrics" help:"Enable all UDP metrics in the G-code. This makes the printer slow."`
+	GcodeAll      bool     `name:"udp.all-metrics" negatable:"" help:"Enable all UDP metrics in the G-code. This makes the printer slow."`
 	GcodeExtra    []string `name:"udp.extra-metrics" placeholder:"METRIC" sep:"none" help:"A UDP metric to enable in the G-code, in addition to the default metrics. Repeat the flag for more metrics."`
 	LokiPushURL   string   `name:"loki.push-url" placeholder:"URL" help:"Loki push URL for the job thumbnail, for example http://loki:3100/loki/api/v1/push. Empty disables the push."`
-	EnablePprof   bool     `name:"web.enable-pprof" help:"Serve the Go profiles on /debug/pprof/. Protect them with --web.config.file if the address is not private."`
+	EnablePprof   bool     `name:"web.enable-pprof" negatable:"" help:"Serve the Go profiles on /debug/pprof/. Protect them with --web.config.file if the address is not private."`
 
 	// The flags of exporter-toolkit (web/kingpinflag) and promslog (promslog/flag).
 	WebListen        []string `name:"web.listen-address" default:":10009" sep:"none" help:"Addresses on which to expose metrics and web interface. Repeatable for multiple addresses. Examples: :9100 or [::1]:9100 for http, vsock://:9100 for vsock."`
-	WebSystemdSocket bool     `name:"web.systemd-socket" help:"Use systemd socket activation listeners instead of port listeners (Linux only)."`
+	WebSystemdSocket bool     `name:"web.systemd-socket" negatable:"" help:"Use systemd socket activation listeners instead of port listeners (Linux only)."`
 	WebConfigFile    string   `name:"web.config.file" help:"Path to configuration file that can enable TLS or authentication. See: https://github.com/prometheus/exporter-toolkit/blob/master/docs/web-configuration.md"`
-	LogLevel         string   `name:"log.level" default:"info" enum:"${log_levels}" help:"Only log messages with the given severity or above. One of: [${log_levels}]"`
-	LogFormat        string   `name:"log.format" default:"logfmt" enum:"${log_formats}" help:"Output format of log messages. One of: [${log_formats}]"`
+	LogLevel         string   `name:"log.level" default:"info" help:"Only log messages with the given severity or above. One of: [${log_levels}]"`
+	LogFormat        string   `name:"log.format" default:"logfmt" help:"Output format of log messages. One of: [${log_formats}]"`
 
 	Version kong.VersionFlag `help:"Show the version."`
 }
@@ -93,10 +93,10 @@ func (c *cli) Validate() error {
 }
 
 // parseFlags parses the command-line arguments. For --help and --version, kong writes
-// to stdout and exits.
-func parseFlags(args []string) (*flags, error) {
+// to stdout and exits. The tests give options to catch the output and the exit.
+func parseFlags(args []string, options ...kong.Option) (*flags, error) {
 	var c cli
-	parser, err := kong.New(&c,
+	parser, err := kong.New(&c, append([]kong.Option{
 		kong.Name(name),
 		kong.Description("Prometheus exporter for Prusa printers."),
 		kong.Vars{
@@ -104,7 +104,7 @@ func parseFlags(args []string) (*flags, error) {
 			"log_levels":  strings.Join(promslog.LevelFlagOptions, ","),
 			"log_formats": strings.Join(promslog.FormatFlagOptions, ","),
 		},
-	)
+	}, options...)...)
 	if err != nil {
 		return nil, fmt.Errorf("flag definitions: %w", err)
 	}
@@ -131,7 +131,7 @@ func parseFlags(args []string) (*flags, error) {
 		},
 		promslogConfig: promslog.Config{Level: promslog.NewLevel(), Format: promslog.NewFormat()},
 	}
-	// The enum tags allow only the values that Set accepts.
+	// Set checks the value. It accepts upper case, as kingpin's promslog/flag did.
 	if err := f.promslogConfig.Level.Set(c.LogLevel); err != nil {
 		return nil, fmt.Errorf("--log.level: %w", err)
 	}
@@ -145,7 +145,7 @@ func main() {
 	f, err := parseFlags(os.Args[1:])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s: error: %v\n", name, err)
-		os.Exit(2)
+		os.Exit(1) // The exit code of kingpin's FatalIfError.
 	}
 	logger := logging.New(&f.promslogConfig, os.Stderr, name, version.Version)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
