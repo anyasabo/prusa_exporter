@@ -34,6 +34,9 @@ linters:
     - funlen
     - gocognit
   settings:
+    nolintlint:
+      require-explanation: true
+      require-specific: true
     exhaustive:
       default-signifies-exhaustive: true
     promlinter:
