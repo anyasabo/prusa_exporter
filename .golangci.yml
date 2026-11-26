@@ -20,7 +20,7 @@ linters:
     - wsl_v5
     # Rules that do not fit this code.
     - depguard # Needs a list of allowed modules. go-licenses checks the licenses.
-    - gomodguard # Deprecated: replaced by gomodguard_v2, which is on.
+    - gomodguard # Deprecated. gomodguard_v2 is on, but with no settings it checks nothing.
     - err113 # The config errors give the field and the value. Nothing compares them.
     - forcetypeassert # Each case is an idiom: http.DefaultTransport.(*http.Transport), sync.Pool.Get().(*T).
     - gochecknoglobals # Prometheus descriptors and metrics are package variables by convention.

@@ -25,8 +25,9 @@ const metricsDoc = "docs/metrics.md"
 // TestMetricsReference makes docs/metrics.md from the real output of the exporter. It
 // is also the contract of the metric names, types and labels: a change of the output
 // changes the file, and the test fails until the file is written again with -update.
+//
+//nolint:paralleltest // With -update, it writes docs/metrics.md, which TestAlertRuleMetrics reads.
 func TestMetricsReference(t *testing.T) {
-	t.Parallel()
 	root, err := os.OpenRoot("internal/prusalink/testdata")
 	if err != nil {
 		t.Fatal(err)

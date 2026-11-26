@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/model"
 
 	"github.com/anyasabo/prusa_exporter/v3/internal/logging"
 )
@@ -311,6 +312,19 @@ func (c *Collector) setKey() {
 	}
 }
 
+// validTags tells if each tag can be a label. The names must be classic Prometheus
+// names: promhttp changes the other characters to "_" for a classic scraper, and two
+// tags can then get the same name. The values must be valid UTF-8, which also keeps
+// the byte 0xff, the separator of the series keys, out of them.
+func validTags(tags []tag) bool {
+	for _, t := range tags {
+		if !model.LegacyValidation.IsValidLabelName(t.key) || !utf8.ValidString(t.value) {
+			return false
+		}
+	}
+	return true
+}
+
 // setLabels writes the tags of p and the printer labels to c.labels, sorted by name.
 // The printer labels replace a tag with the same name. The caller holds c.mu.
 func (c *Collector) setLabels(tags []tag, mac, address string) {
@@ -328,8 +342,18 @@ func (c *Collector) setLabels(tags []tag, mac, address string) {
 // returns nil if the series is not valid (for example if the family has a different
 // kind) or if the series limit is reached. The caller holds c.mu.
 func (c *Collector) getSeries(help helpSpec, extra tag) *series {
+	// Check the name before the lookup: an invalid name can give the key of a valid series.
+	if !model.LegacyValidation.IsValidMetricName(string(c.nameBuf)) {
+		c.warnOnce("\xffinvalid_name", "A UDP metric name is not a valid Prometheus name. The exporter drops the point.", logging.MetricName, strings.ToValidUTF8(string(c.nameBuf), "?"))
+		return nil
+	}
 	if s, ok := c.series[string(c.keyBuf)]; ok && s.family.kind == help.kind {
 		return s
+	}
+	// The limit applies before a new family, so that the families map is also bounded.
+	if c.opts.MaxSeries > 0 && len(c.series) >= c.opts.MaxSeries {
+		c.warnOnce("\xffmax_series", "The UDP series limit is reached. The exporter drops the points of new series.", logging.SeriesLimit, c.opts.MaxSeries)
+		return nil
 	}
 	if reservedNames[string(c.nameBuf)] {
 		c.warnOnce(string(c.nameBuf), "A UDP metric has a reserved name. The exporter ignores it.", logging.MetricName, string(c.nameBuf))
@@ -345,11 +369,6 @@ func (c *Collector) getSeries(help helpSpec, extra tag) *series {
 		c.warnOnce(fam.name, "A UDP point needs a different metric type than the first point of the metric. The exporter ignores the point.", logging.MetricName, fam.name)
 		return nil
 	}
-	if c.opts.MaxSeries > 0 && len(c.series) >= c.opts.MaxSeries {
-		c.warnOnce("\xffmax_series", "The UDP series limit is reached. The exporter drops the points of new series.", logging.SeriesLimit, c.opts.MaxSeries)
-		return nil
-	}
-
 	labels := c.labels
 	if extra.key != "" {
 		labels = append(slices.Clone(labels), extra)
@@ -401,6 +420,11 @@ func (c *Collector) record(ctx context.Context, mac string, addr netip.Addr, poi
 			if c.logger.Enabled(ctx, slog.LevelDebug) {
 				c.logger.DebugContext(ctx, "Error point from the printer", logging.PrinterMAC, mac, logging.MetricName, p.Name, logging.PointError, msg)
 			}
+			continue
+		}
+		if !validTags(p.Tags) {
+			c.warnOnce("\xffinvalid_tags", "A UDP point has a tag that is not a valid label. The exporter drops the point.", logging.MetricName, strings.ToValidUTF8(p.Name, "?"))
+			dropped++
 			continue
 		}
 		c.setLabels(p.Tags, pk.mac, st.address)

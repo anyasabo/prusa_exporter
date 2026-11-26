@@ -12,6 +12,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/prometheus/common/model"
 )
 
 var (
@@ -250,6 +251,34 @@ func TestCollectorInvalidUTF8(t *testing.T) {
 	}
 }
 
+// TestCollectorLegacyNames sends names that client_golang accepts as UTF-8 names, but
+// that promhttp changes to "_" for a scraper that asks for the classic format. Then two
+// labels or two families get the same name, and Prometheus refuses the whole scrape.
+// It also sends a tag value with the byte 0xff, the separator of the series keys: it
+// gives the same key as the labels of another series.
+func TestCollectorLegacyNames(t *testing.T) {
+	t.Parallel()
+	c, _ := newTestCollector(t, Options{})
+	c.Handle(t.Context(), msg(
+		"m,x.y=1,x_y=2 v=1 0",    // two label names that become "x_y"
+		"a.b v=1 0", "a_b v=2 0", // two metric names that become "prusa_a_b"
+		"k,a=x,b=z v=1 0",    // the series k{a="x",b="z"}
+		"k,a=x\xffb=z v=2 0", // the value "x\xffb=z": the same series key as above
+	), printer, t0)
+	checkExposition(t, c)
+	compare(t, c, `
+		# HELP prusa_a_b UDP metric "a_b" from the printer firmware, float value.
+		# TYPE prusa_a_b gauge
+		prusa_a_b{printer_address="192.168.1.10",printer_mac="AA:BB"} 2
+		# HELP prusa_k UDP metric "k" from the printer firmware, float value.
+		# TYPE prusa_k gauge
+		prusa_k{a="x",b="z",printer_address="192.168.1.10",printer_mac="AA:BB"} 1
+	`, "prusa_a_b", "prusa_k")
+	if got := testutil.ToFloat64(c.metrics.pointsDropped); got != 3 {
+		t.Errorf("dropped points = %v, want 3", got)
+	}
+}
+
 func TestCollectorConcurrent(t *testing.T) {
 	t.Parallel()
 	c, _ := newTestCollector(t, Options{SeriesTTL: time.Nanosecond})
@@ -316,14 +345,36 @@ func FuzzHandleGather(f *testing.F) {
 	f.Add(msg("temp_noz v=215.5 0", "fan rpm=1i,pwm=2i 10", `s v="x" 0`, "e v=T 0", `n error="x" 0`, "t,a=b v=1 0"))
 	f.Add([]byte("<14>1 - \xff buddy - - - msg=1,tm=1,v=4 a v=1 0\n"))
 	f.Add(msg("\xff error=\"x\" 0", "a,\xff=b v=1 0", `s v="\xff" 0`))
+	f.Add(msg("m,x.y=1,x_y=2 v=1 0", "a.b v=1 0", "a_b v=2 0", "k,a=x\xffb=z v=2 0"))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		c, _ := newTestCollector(t, Options{EventMetrics: []string{"e"}})
 		c.Handle(t.Context(), msg("good v=1 0"), printer, t0)
 		c.Handle(t.Context(), data, printer, t0)
-		reg := prometheus.NewPedanticRegistry()
-		reg.MustRegister(c)
-		if _, err := reg.Gather(); err != nil {
-			t.Fatalf("Gather after %q: %v", data, err)
-		}
+		checkExposition(t, c)
 	})
+}
+
+// checkExposition gathers c with the pedantic registry and checks that each metric and
+// label name is a classic Prometheus name. Gather accepts UTF-8 names, but promhttp
+// changes them to "_" for a classic scraper, and two names can then become one.
+func checkExposition(t *testing.T, c prometheus.Collector) {
+	t.Helper()
+	reg := prometheus.NewPedanticRegistry()
+	reg.MustRegister(c)
+	mfs, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("Gather: %v", err)
+	}
+	for _, mf := range mfs {
+		if !model.LegacyValidation.IsValidMetricName(mf.GetName()) {
+			t.Errorf("metric name %q is not a classic name", mf.GetName())
+		}
+		for _, m := range mf.GetMetric() {
+			for _, l := range m.GetLabel() {
+				if !model.LegacyValidation.IsValidLabelName(l.GetName()) {
+					t.Errorf("%s: label name %q is not a classic name", mf.GetName(), l.GetName())
+				}
+			}
+		}
+	}
 }
