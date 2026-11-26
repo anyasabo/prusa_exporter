@@ -63,6 +63,10 @@ By default at start of the exporter will send the configuration gcode to the pri
 
 Of course you can configure metrics with gcode as well - that gcode can be found [here](docs/config/config_full.gcode). This list is not complete because there are constant changes in [Prusa-Firmware-Buddy](github.com/prusa3d/Prusa-Firmware-Buddy/). 
 
+### UDP limits
+
+The exporter accepts UDP datagrams from each sender that can reach its port. It drops a point with a name or a tag that is not a valid Prometheus name. `udp_max_series` in the `exporter:` section limits the UDP series (default 10000). Each printer (MAC address and source IP) and each metric with error points count as one too. A gauge or info series expires after `udp_series_ttl`. Counters, printers and error metrics do not expire, so their counts stay correct. Thus many fake senders can fill the limit until the exporter restarts. Then the exporter drops the points of real printers too, and `prusa_exporter_udp_points_total{result="dropped"}` increases. Allow only the printers to send to the UDP port, for example with a firewall.
+
 ### How to manually activate UDP metrics
 
 I've prepared quick guide where you can learn how to manually activate UDP metrics in the printer. You can find it in here, in [UDP.md](docs/readme/udp/UDP.md). If you are using older firmware then you can try to use older guide but beware that it is not supported. That can be found in [UDP_OLD_FW.md](docs/readme/udp_old_fw/UDP_OLD_FW.md).

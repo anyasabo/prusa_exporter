@@ -317,20 +317,12 @@ func (c *Collector) setKey() {
 	}
 }
 
-// validPoint tells if the names of p can be Prometheus names, before any series lookup.
-// The point name, the field keys and the tag keys must be classic names: promhttp
-// changes the other characters to "_" for a classic scraper, and two names can then
-// become one. The tag values must be valid UTF-8. Together, these checks keep the
-// separators of the series keys (0xff and "=") out of the names and the values.
+// validPoint tells if the tags of p can be labels. The names must be classic Prometheus
+// names: promhttp changes the other characters to "_" for a classic scraper, and two
+// names can then become one. The values must be valid UTF-8. Together, these checks
+// keep the separators of the series keys (0xff and "=") out of the labels. validName
+// checks the metric name.
 func validPoint(p *point) bool {
-	if !model.LegacyValidation.IsValidLabelName(p.Name) {
-		return false
-	}
-	for _, f := range p.Fields {
-		if !model.LegacyValidation.IsValidLabelName(f.key) {
-			return false
-		}
-	}
 	for _, t := range p.Tags {
 		if !model.LegacyValidation.IsValidLabelName(t.key) || !utf8.ValidString(t.value) {
 			return false
@@ -339,13 +331,25 @@ func validPoint(p *point) bool {
 	return true
 }
 
+// validName tells if c.nameBuf is a classic Prometheus metric name. Call it before a
+// lookup with c.keyBuf: a name with 0xff or "=" can give the key of another series. The
+// name has the prefix, so a firmware name can start with a digit ("24VVoltage"). The
+// caller holds c.mu.
+func (c *Collector) validName() bool {
+	if model.LegacyValidation.IsValidMetricName(string(c.nameBuf)) {
+		return true
+	}
+	c.warnOnce("\xffinvalid_name", "A UDP metric name is not a valid Prometheus name. The exporter drops the point.", logging.MetricName, strings.ToValidUTF8(string(c.nameBuf), "?"))
+	return false
+}
+
 // full tells if the series limit is reached. The printers and the error points count
 // too, because the datagrams make them. The caller holds c.mu.
 func (c *Collector) full() bool {
 	if c.opts.MaxSeries <= 0 || len(c.series)+len(c.printers)+len(c.pointErrors) < c.opts.MaxSeries {
 		return false
 	}
-	c.warnOnce("\xffmax_series", "The UDP series limit is reached. The exporter drops the points of new series.", logging.SeriesLimit, c.opts.MaxSeries)
+	c.warnOnce("\xffmax_series", "The UDP series limit is reached. The exporter drops the points of new series, new printers and new error metrics.", logging.SeriesLimit, c.opts.MaxSeries)
 	return true
 }
 
@@ -375,30 +379,29 @@ func (c *Collector) setLabels(tags []tag, mac, address string) {
 // returns nil if the series is not valid (for example if the family has a different
 // kind) or if the series limit is reached. The caller holds c.mu.
 func (c *Collector) getSeries(help helpSpec, extra tag) *series {
-	// Check the name before the lookup: an invalid name can give the key of a valid series.
-	if !model.LegacyValidation.IsValidMetricName(string(c.nameBuf)) {
-		c.warnOnce("\xffinvalid_name", "A UDP metric name is not a valid Prometheus name. The exporter drops the point.", logging.MetricName, strings.ToValidUTF8(string(c.nameBuf), "?"))
+	if !c.validName() {
 		return nil
 	}
 	if s, ok := c.series[string(c.keyBuf)]; ok && s.family.kind == help.kind {
 		return s
 	}
-	// The limit applies before a new family, so that the families map is also bounded.
-	if c.full() {
-		return nil
-	}
 	if reservedNames[string(c.nameBuf)] {
 		c.warnOnce(string(c.nameBuf), "A UDP metric has a reserved name. The exporter ignores it.", logging.MetricName, string(c.nameBuf))
 		return nil
 	}
-	// A new family goes into the map only with its first valid series, below.
 	fam, ok := c.families[string(c.nameBuf)]
+	if ok && fam.kind != help.kind {
+		// One key for all names: the names come from the datagrams.
+		c.warnOnce("\xffkind_conflict", "A UDP point needs a different metric type than the first point of the metric. The exporter ignores the point.", logging.MetricName, fam.name)
+		return nil
+	}
+	// The limit applies before a new family, so that the families map is also bounded.
+	if c.full() {
+		return nil
+	}
+	// A new family goes into the map only with its first valid series, below.
 	if !ok {
 		fam = &family{name: string(c.nameBuf), help: help.text(), kind: help.kind}
-	}
-	if fam.kind != help.kind {
-		c.warnOnce(fam.name, "A UDP point needs a different metric type than the first point of the metric. The exporter ignores the point.", logging.MetricName, fam.name)
-		return nil
 	}
 	labels := c.labels
 	if extra.key != "" {
@@ -448,7 +451,7 @@ func (c *Collector) record(ctx context.Context, mac string, addr netip.Addr, poi
 			continue
 		}
 		if !validPoint(p) {
-			c.warnOnce("\xffinvalid_point", "A UDP point has a name, a field or a tag that is not a valid Prometheus name. The exporter drops the point.", logging.MetricName, strings.ToValidUTF8(p.Name, "?"))
+			c.warnOnce("\xffinvalid_point", "A UDP point has a tag that is not a valid label. The exporter drops the point.", logging.MetricName, strings.ToValidUTF8(p.Name, "?"))
 			dropped++
 			continue
 		}
@@ -593,6 +596,9 @@ func (c *Collector) recordPoint(p *point, received time.Time) bool {
 func (c *Collector) recordInfo(p *point, f field, received time.Time) bool {
 	c.setName(p.Name, f.key, "_info")
 	c.setKey()
+	if !c.validName() {
+		return false
+	}
 	if old, ok := c.series[string(c.keyBuf)]; ok && old.family.kind == kindInfo && old.info != f.str {
 		c.deleteSeries(string(c.keyBuf), old)
 	}

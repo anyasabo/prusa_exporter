@@ -321,6 +321,35 @@ func TestCollectorInfoKeyBeforeCheck(t *testing.T) {
 	}
 }
 
+// TestCollectorFirmwareNames sends names of the firmware that start with a digit. With
+// the prefix, they are valid metric names.
+func TestCollectorFirmwareNames(t *testing.T) {
+	t.Parallel()
+	c, _ := newTestCollector(t, Options{})
+	c.Handle(t.Context(), msg("24VVoltage v=24.1 0", "5VVoltage v=5.02 0"), printer, t0)
+	if got := testutil.CollectAndCount(c, "prusa_24VVoltage", "prusa_5VVoltage"); got != 2 {
+		t.Errorf("series = %d, want 2", got)
+	}
+}
+
+// TestCollectorWarningsBounded sends a kind conflict with a new name after each TTL.
+// The warnings must not keep one entry for each name.
+func TestCollectorWarningsBounded(t *testing.T) {
+	t.Parallel()
+	c, _ := newTestCollector(t, Options{MaxSeries: 10, SeriesTTL: time.Minute})
+	now := t0
+	for i := range 100 {
+		c.now = func() time.Time { return now }
+		c.Handle(t.Context(), msg(fmt.Sprintf("g%d_info v=1 0", i), fmt.Sprintf(`g%d v="s" 0`, i)), printer, now)
+		now = now.Add(time.Hour)
+		c.now = func() time.Time { return now }
+		testutil.CollectAndCount(c)
+	}
+	if len(c.warned) > 10 {
+		t.Errorf("warnings = %d, want at most 10", len(c.warned))
+	}
+}
+
 func TestCollectorConcurrent(t *testing.T) {
 	t.Parallel()
 	c, _ := newTestCollector(t, Options{SeriesTTL: time.Nanosecond})
